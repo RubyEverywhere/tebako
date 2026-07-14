@@ -141,6 +141,10 @@ else(NCORES_RES EQUAL 0)
 endif(NCORES_RES EQUAL 0)
 
 # Various locations for external projects
+# TEBAKO v0.13 PORT: path to pre-staged v0.13 DwarFS + ported libdwarfs-wr artifacts
+if(NOT DEFINED TEBAKO_V013_STAGED_DEPS)
+  set(TEBAKO_V013_STAGED_DEPS "$ENV{TEBAKO_V013_STAGED_DEPS}")
+endif()
 set(DEPS ${CMAKE_CURRENT_SOURCE_DIR}/deps CACHE STRING "Dependencies' folder'")
 set(DEPS_INCLUDE_DIR ${DEPS}/include)
 set(DEPS_SRC_DIR ${DEPS}/src)
@@ -178,7 +182,7 @@ string(CONCAT RUBY_API_VER ${RUBY_VER_BASE} ".0")
 #  list(GET LIBDWARFS_WR_VER_COMPONENTS 2 LIBDWARFS_WR_VER_PATCH)
 #  set (LIBDWARFS_WR_VER_M ${LIBDWARFS_WR_VER_MAJOR}.${LIBDWARFS_WR_VER_MINOR}.${LIBDWARFS_WR_VER_PATCH})
 #else(DWARFS_PRELOAD)
-def_ext_prj_g(DWARFS_WR "v0.11.0")
+def_ext_prj_g(DWARFS_WR "rubyeverywhere-v0.15.5")
 #endif(DWARFS_PRELOAD)
 
 def_ext_prj_g(PATCHELF "65e14792061c298f1d2bc44becd48a10cbf0bc81")
@@ -249,15 +253,20 @@ message(STATUS "Not building Ruby extensions: ${RUBY_WITHOUT_EXT}")
 # These forward-declarations and BUILD_BYPRODICTS are required to support 'Ninja'
 # Otherwise add_dependencies would be enough for 'Unix makefiles' generator
 
+# libdwarfs (the wrapper) builds + installs the DwarFS v0.15 split static libs and the wrapper
+# into ${DEPS_LIB_DIR}. These byproducts let Ninja track the ExternalProject outputs.
 set(__LIBDWARFS_WR "${DEPS_LIB_DIR}/libdwarfs-wr.a")
-set(__LIBDWARFS "${DEPS_LIB_DIR}/libdwarfs.a")
-set(__LIBFOLLY "${DEPS_LIB_DIR}/libfolly.a")
-set(__LIBFSST "${DEPS_LIB_DIR}/libfsst.a")
-set(__LIBT_METADATA "${DEPS_LIB_DIR}/libmetadata_thrift.a")
-set(__LIBT_LIGHT "${DEPS_LIB_DIR}/libthrift_light.a")
-set(__LIBXXHASH "${DEPS_LIB_DIR}/libxxhash.a")
-set(__LIBZSTD "${DEPS_LIB_DIR}/libzstd.a")
-set(__LIBARCHIVE "${DEPS_LIB_DIR}/libarchive.a")
+set(__LIBDWARFS_READER            "${DEPS_LIB_DIR}/libdwarfs_reader.a")
+set(__LIBDWARFS_COMMON            "${DEPS_LIB_DIR}/libdwarfs_common.a")
+set(__LIBDWARFS_DECOMPRESSOR      "${DEPS_LIB_DIR}/libdwarfs_decompressor.a")
+set(__LIBDWARFS_FSST              "${DEPS_LIB_DIR}/libdwarfs_fsst.a")
+set(__LIBDWARFS_FROZEN            "${DEPS_LIB_DIR}/libdwarfs_frozen.a")
+set(__LIBDWARFS_THRIFT_LITE       "${DEPS_LIB_DIR}/libdwarfs_thrift_lite_v2.a")
+set(__LIBDWARFS_METADATA_THRIFT   "${DEPS_LIB_DIR}/libdwarfs_metadata_thrift.a")
+set(__LIBDWARFS_COMPRESSION_THRIFT "${DEPS_LIB_DIR}/libdwarfs_compression_thrift.a")
+set(__LIBDWARFS_HISTORY_THRIFT    "${DEPS_LIB_DIR}/libdwarfs_history_thrift.a")
+set(__LIBDWARFS_FEATURES_THRIFT   "${DEPS_LIB_DIR}/libdwarfs_features_thrift.a")
+set(__LIBJEMALLOC "${DEPS_LIB_DIR}/libjemalloc.a")
 
 if(DWARFS_PRELOAD)
   ExternalProject_Add(${LIBDWARFS_WR_PRJ}
@@ -274,27 +283,29 @@ if(DWARFS_PRELOAD)
     TEST_COMMAND ""
   )
 else(DWARFS_PRELOAD)
+  # Build the RubyEverywhere libdwarfs wrapper from source. It in turn builds+installs DwarFS
+  # v0.15 (split static libs) and jemalloc into ${DEPS}. Override DWARFS_WR_GIT_REPOSITORY to
+  # iterate against a local checkout.
+  if(NOT DWARFS_WR_GIT_REPOSITORY)
+    set(DWARFS_WR_GIT_REPOSITORY "https://github.com/RubyEverywhere/libdwarfs.git")
+  endif()
   ExternalProject_Add(${DWARFS_WR_PRJ}
-    GIT_SHALLOW true
     PREFIX ${DEPS}
-    GIT_REPOSITORY https://github.com/tamatebako/libdwarfs.git
+    GIT_REPOSITORY ${DWARFS_WR_GIT_REPOSITORY}
     GIT_TAG ${DWARFS_WR_TAG}
+    GIT_SHALLOW false
     SOURCE_DIR ${DWARFS_WR_SOURCE_DIR}
     BINARY_DIR ${DWARFS_WR_BINARY_DIR}
     UPDATE_COMMAND ""
-    BUILD_COMMAND ${CMAKE_COMMAND} --build ${DWARFS_WR_BINARY_DIR} --parallel ${NCORES}
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DEPS}
                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-               -DWITH_TESTS:BOOL=OFF
-               -DWITH_ASAN:BOOL=OFF
-               -DWITH_COVERAGE:BOOL=OFF
-               -DTEBAKO_BUILD_SCOPE=MKD
-               -DOPENSSL_VERSION=${OPENSSL_VER}
-               -DRB_W32=${RB_W32}
-               -GNinja
-    BUILD_BYPRODUCTS ${__LIBDWARFS_WR}
-                     ${__LIBDWARFS} ${__LIBFSST} ${__LIBFOLLY} ${__LIBT_METADATA}
-                     ${__LIBT_LIGHT} ${__LIBXXHASH} ${__LIBZSTD} ${__LIBARCHIVE}
+               -DDEPS=${DEPS}
+               -DWITH_TESTS=OFF
+    BUILD_BYPRODUCTS ${__LIBDWARFS_WR}          ${__LIBDWARFS_READER}   ${__LIBDWARFS_COMMON}
+                     ${__LIBDWARFS_DECOMPRESSOR} ${__LIBDWARFS_FSST}    ${__LIBDWARFS_FROZEN}
+                     ${__LIBDWARFS_THRIFT_LITE}  ${__LIBDWARFS_METADATA_THRIFT}
+                     ${__LIBDWARFS_COMPRESSION_THRIFT} ${__LIBDWARFS_HISTORY_THRIFT}
+                     ${__LIBDWARFS_FEATURES_THRIFT}    ${__LIBJEMALLOC}
   )
 endif(DWARFS_PRELOAD)
 
@@ -320,6 +331,12 @@ endif(IS_GNU)
 
 set(RUBY_L_FLAGS "-L${DEPS_LIB_DIR} -L${CMAKE_CURRENT_BINARY_DIR}")
 set(RUBY_C_FLAGS "-fPIC -I${DEPS_INCLUDE_DIR} -I${CMAKE_CURRENT_SOURCE_DIR}/include -Wno-incompatible-pointer-types")
+# clang >= 21 promotes -Wimplicit-function-declaration / -Wimplicit-int to hard errors, which breaks
+# mkmf's have_func() link-probes during the extension build (they rely on implicit declarations).
+# When those probes fail, extensions fall back to their `#ifndef HAVE_RB_*` compat shims, which then
+# clash with the real (non-static) declarations ("static declaration follows non-static"). Overriding
+# warnflags (applied last in Ruby's CFLAGS) demotes these back to warnings so detection works.
+set(RUBY_WARN_FLAGS "-Wno-implicit-function-declaration -Wno-implicit-int -Wno-incompatible-pointer-types -Wno-error=implicit-function-declaration -Wno-error=implicit-int")
 
 if(${RUBY_VER} VERSION_LESS "3.2.0" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15.0.0" AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   string(CONCAT RUBY_C_FLAGS ${RUBY_C_FLAGS} " -std=gnu17")
@@ -384,6 +401,7 @@ ExternalProject_Add(${RUBY_PRJ}
                                                         --with-out-ext=${RUBY_WITHOUT_EXT}    \
                                                         --prefix=${DATA_SRC_DIR}              \
                                                         ${C_FLAGS_DEST}=\"${RUBY_C_FLAGS}\"   \
+                                                        warnflags=\"${RUBY_WARN_FLAGS}\"      \
                                                         LDFLAGS=\"${RUBY_L_FLAGS}\""
   COMMAND   ruby ${EXE}/tebako-packager pass2 ${OSTYPE_TXT} ${RUBY_SOURCE_DIR} ${DEPS_LIB_DIR} ${DATA_SRC_DIR} ${RUBY_STASH_DIR} ${RUBY_VER}
   INSTALL_COMMAND  ""

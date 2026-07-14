@@ -37,15 +37,32 @@ module Tebako
         DARWIN_BREW_LIBS = [
           ["zlib", "z"],              ["gdbm", "gdbm"],           ["readline", "readline"], ["libffi", "ffi"],
           ["ncurses", "ncurses"],     ["lz4", "lz4"],             ["xz", "lzma"],           ["libyaml", "yaml"],
-          ["boost", "boost_chrono"],  ["double-conversion", "double-conversion"]
+          ["boost", "boost_chrono"],  ["double-conversion", "double-conversion"],
+          # DwarFS v0.15 compression/hash deps (were staged into deps_lib_dir under the bridge)
+          ["xxhash", "xxhash"],               ["zstd", "zstd"],
+          ["brotli", "brotlienc"],            ["brotli", "brotlidec"],            ["brotli", "brotlicommon"],
+          # DwarFS reader link deps
+          ["boost", "boost_filesystem"],      ["boost", "boost_atomic"],
+          ["boost", "boost_iostreams"],       ["boost", "boost_program_options"],
+          ["boost", "boost_context"],         ["boost", "boost_regex"],
+          ["boost", "boost_thread"],
+          ["flac", "FLAC"],                   ["flac", "FLAC++"],
+          ["libogg", "ogg"]
         ].freeze
 
         DARWIN_BREW_LIBS_PRE_31 = [["openssl@1.1", "ssl"], ["openssl@1.1", "crypto"]].freeze
 
         DARWIN_BREW_LIBS_31 = [["openssl@3", "ssl"], ["openssl@3", "crypto"]].freeze
 
-        DARWIN_DEP_LIBS_1 = ["folly", "fsst",   "metadata_thrift", "thrift_light", "xxhash",       "zstd"].freeze
-        DARWIN_DEP_LIBS_2 = ["glog",  "gflags", "brotlienc",       "brotlidec",    "brotlicommon", "fmt"].freeze
+        # DwarFS v0.15 split static libs (installed to deps_lib_dir by libdwarfs). folly/fbthrift
+        # are gone; the thrift/fsst/frozen libs are now real .a files. glog/gflags/fmt are no
+        # longer linked (fmt is header-only / baked into the DwarFS libs).
+        DARWIN_DEP_LIBS_1 = [
+          "dwarfs_reader", "dwarfs_common",
+          "dwarfs_fsst", "dwarfs_frozen", "dwarfs_thrift_lite_v2",
+          "dwarfs_metadata_thrift", "dwarfs_compression_thrift",
+          "dwarfs_history_thrift", "dwarfs_features_thrift"
+        ].freeze
         # rubocop:enable Style/WordArray
 
         LIBTEBAKOFS = "-Wl,--push-state,--whole-archive -l:libtebako-fs.a -Wl,--pop-state"
@@ -129,10 +146,16 @@ module Tebako
           process_brew_libs!(libs, ruby_ver.ruby31? ? DARWIN_BREW_LIBS_31 : DARWIN_BREW_LIBS_PRE_31)
           process_brew_libs!(libs, DARWIN_BREW_LIBS)
 
-          DARWIN_DEP_LIBS_2.each { |lib| libs << "#{deps_lib_dir}/lib#{lib}.a " }
-
-          compression_lib = with_compression ? "-force_load #{deps_lib_dir}/libdwarfs_compression.a" : ""
-          "-ltebako-fs -ldwarfs-wr -ldwarfs #{compression_lib} #{libs} -ljemalloc -lc++ -lc++abi"
+          # DwarFS compression codecs self-register via static initializers, so force_load the
+          # (de)compressor libs to keep them (the reader would otherwise drop the unreferenced ones).
+          compression_lib =
+            if with_compression
+              "-force_load #{deps_lib_dir}/libdwarfs_decompressor.a " \
+              "-force_load #{deps_lib_dir}/libdwarfs_compressor.a"
+            else
+              ""
+            end
+          "-ltebako-fs -ldwarfs-wr #{compression_lib} #{libs} #{deps_lib_dir}/libjemalloc.a -lc++ -lc++abi"
         end
 
         # .....................................................
