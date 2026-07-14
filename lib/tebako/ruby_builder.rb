@@ -40,12 +40,22 @@ module Tebako
       @ncores = ScenarioManagerBase.new.ncores
     end
 
+    # Ruby's parallel build can race on ext/extinit.o: the `ruby` link step can start before
+    # extinit.o is (re)built after configure-ext.mk is regenerated, giving
+    # "clang: error: no such file or directory: 'ext/extinit.o'". A second, serial pass is
+    # mostly cached and builds the raced target deterministically, so retry once serially.
+    def make_target(*args)
+      BuildHelpers.run_with_capture(["make", *args, "-j#{@ncores}"])
+    rescue Tebako::Error
+      BuildHelpers.run_with_capture(["make", *args])
+    end
+
     # Final build of tebako package
     def toolchain_build
       puts "   ... building toolchain Ruby"
       Dir.chdir(@src_dir) do
-        BuildHelpers.run_with_capture(["make", "-j#{@ncores}"])
-        BuildHelpers.run_with_capture(["make", "install", "-j#{@ncores}"])
+        make_target
+        make_target("install")
       end
     end
 
@@ -53,8 +63,8 @@ module Tebako
     def target_build(output_type)
       puts "   ... building tebako #{output_type}"
       Dir.chdir(@src_dir) do
-        BuildHelpers.run_with_capture(["make", "ruby", "-j#{@ncores}"]) if @ruby_ver.ruby3x?
-        BuildHelpers.run_with_capture(["make", "-j#{@ncores}"])
+        make_target("ruby") if @ruby_ver.ruby3x?
+        make_target
       end
     end
   end
