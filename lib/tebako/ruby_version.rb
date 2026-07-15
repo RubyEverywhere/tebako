@@ -32,25 +32,17 @@ require_relative "error"
 module Tebako
   # Ruby version
   class RubyVersion
+    # Supported Ruby versions: latest patch release of each maintained line (3.2+ through 4.0).
+    # Support for 2.7.x, 3.0.x and 3.1.x was dropped.
     RUBY_VERSIONS = {
-      "2.7.8" => "c2dab63cbc8f2a05526108ad419efa63a67ed4074dbbcf9fc2b1ca664cb45ba0",
-      "3.0.7" => "2a3411977f2850431136b0fab8ad53af09fb74df2ee2f4fb7f11b378fe034388",
-      "3.1.6" => "0d0dafb859e76763432571a3109d1537d976266be3083445651dc68deed25c22",
-      "3.2.4" => "c72b3c5c30482dca18b0f868c9075f3f47d8168eaf626d4e682ce5b59c858692",
-      "3.2.5" => "ef0610b498f60fb5cfd77b51adb3c10f4ca8ed9a17cb87c61e5bea314ac34a16",
-      "3.2.6" => "d9cb65ecdf3f18669639f2638b63379ed6fbb17d93ae4e726d4eb2bf68a48370",
-      "3.2.7" => "8488fa620ff0333c16d437f2b890bba3b67f8745fdecb1472568a6114aad9741",
-      "3.3.3" => "83c05b2177ee9c335b631b29b8c077b4770166d02fa527f3a9f6a40d13f3cce2",
-      "3.3.4" => "fe6a30f97d54e029768f2ddf4923699c416cdbc3a6e96db3e2d5716c7db96a34",
-      "3.3.5" => "3781a3504222c2f26cb4b9eb9c1a12dbf4944d366ce24a9ff8cf99ecbce75196",
-      "3.3.6" => "8dc48fffaf270f86f1019053f28e51e4da4cce32a36760a0603a9aee67d7fd8d",
-      "3.3.7" => "9c37c3b12288c7aec20ca121ce76845be5bb5d77662a24919651aaf1d12c8628",
-      "3.4.1" => "3d385e5d22d368b064c817a13ed8e3cc3f71a7705d7ed1bae78013c33aa7c87f",
-      "3.4.2" => "41328ac21f2bfdd7de6b3565ef4f0dd7543354d37e96f157a1552a6bd0eb364b"
+      "3.2.11" => "b3eeabd6636f334531db3ffdc3229eb05e524740e6c84fdc043720573cf2f8b2",
+      "3.3.11" => "59f0fafb1a59a05dc3765117af3fa68e153eb48254708549f321c1e9e078d7a0",
+      "3.4.10" => "ecee2d072a14f2d14347dd56dfd8fe5c3130abf5117bfaacbda0f4ef9cc429ec",
+      "4.0.6" => "837d299e8f7ddf2be31a229a7a7e019d354979825117989acb3b32b1a9be262a"
     }.freeze
 
-    MIN_RUBY_VERSION_WINDOWS = "3.1.6"
-    DEFAULT_RUBY_VERSION = "3.3.7"
+    MIN_RUBY_VERSION_WINDOWS = "3.2.11"
+    DEFAULT_RUBY_VERSION = "4.0.6"
 
     def initialize(ruby_version)
       @ruby_version = ruby_version.nil? ? DEFAULT_RUBY_VERSION : ruby_version
@@ -72,38 +64,42 @@ module Tebako
       @lib_version ||= "#{@ruby_version.split(".")[0..1].join}0"
     end
 
+    # Version predicates are "this behavior applies to this version and newer", compared on
+    # Gem::Version so they are correct for Ruby 4.x (major != 3) and for two-digit patch levels
+    # (e.g. 3.3.11, 3.4.10). Ruby 4.0 satisfies the >= 3.x gates by design - it inherits the
+    # latest (3.4+) build behavior.
     def ruby3x?
-      @ruby3x ||= @ruby_version[0] == "3"
+      @ruby3x ||= at_least?("3.0.0")
     end
 
     def ruby31?
-      @ruby31 ||= ruby3x? && @ruby_version[2].to_i >= 1
+      @ruby31 ||= at_least?("3.1.0")
     end
 
     def ruby32?
-      @ruby32 ||= ruby3x? && @ruby_version[2].to_i >= 2
+      @ruby32 ||= at_least?("3.2.0")
     end
 
     def ruby32only?
-      @ruby32only ||= ruby3x? && @ruby_version[2] == "2"
+      @ruby32only ||= minor_line?(3, 2)
     end
 
     def ruby33?
-      @ruby33 ||= ruby3x? && @ruby_version[2].to_i >= 3
+      @ruby33 ||= at_least?("3.3.0")
     end
 
     def ruby33only?
-      @ruby33only ||= ruby3x? && @ruby_version[2] == "3"
+      @ruby33only ||= minor_line?(3, 3)
     end
 
     def ruby3x7?
       @ruby3x7 ||= ruby34? ||
-                   (ruby33only? && @ruby_version[4].to_i >= 7) ||
-                   (ruby32only? && @ruby_version[4].to_i >= 7)
+                   (ruby32only? && teeny >= 7) ||
+                   (ruby33only? && teeny >= 7)
     end
 
     def ruby34?
-      @ruby34 ||= ruby3x? && @ruby_version[2].to_i >= 4
+      @ruby34 ||= at_least?("3.4.0")
     end
 
     def run_checks
@@ -131,6 +127,28 @@ module Tebako
       if Gem::Version.new(@ruby_version) < Gem::Version.new(MIN_RUBY_VERSION_WINDOWS) && ScenarioManagerBase.new.msys?
         raise Tebako::Error.new("Ruby version #{@ruby_version} is not supported on Windows", 111)
       end
+    end
+
+    private
+
+    def gem_version
+      @gem_version ||= Gem::Version.new(@ruby_version)
+    end
+
+    def segments
+      @segments ||= gem_version.segments
+    end
+
+    def at_least?(version)
+      gem_version >= Gem::Version.new(version)
+    end
+
+    def teeny
+      segments[2].to_i
+    end
+
+    def minor_line?(major, minor)
+      segments[0] == major && segments[1] == minor
     end
   end
 

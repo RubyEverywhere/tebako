@@ -125,14 +125,15 @@ higher.
 |===
 | Ruby version | Supported platforms
 
-| 2.7.8 | Linux, macOS
-| 3.0.7 | Linux, macOS
-| 3.1.6 | Linux, macOS, Windows
-| 3.2.{4,5,6,7} | Linux, macOS, Windows
-| 3.3.{3,4,5,6,7} | Linux, macOS, Windows
-| 3.4.{1,2} | Linux, macOS, Windows
+| 3.2.11 | Linux, macOS, Windows
+| 3.3.11 | Linux, macOS, Windows
+| 3.4.10 | Linux, macOS, Windows
+| 4.0.6 | Linux, macOS, Windows
 
 |===
+
+NOTE: Support for Ruby 2.7.x, 3.0.x, and 3.1.x has been dropped. Tebako
+packages the latest patch release of each supported line (3.2 through 4.0).
 
 NOTE: Our goal is to support all maintained Ruby releases, including minor versions.
 
@@ -436,7 +437,7 @@ the Tebako root folder (see details: <<root-folder-selection>>)
 
 `--Ruby=<ruby-version>`::
 this parameter defines Ruby version that will be packaged (optional, defaults to
-`3.3.7`)
+`4.0.6`)
 
 `--root=<project-root-folder>`::
 a folder at the host source file system where project files are located.
@@ -735,7 +736,7 @@ You can package it to `./fontist-package` using the following command:
 ----
 docker run -v $PWD:/mnt/w \
   -t ghcr.io/tamatebako/tebako-ubuntu-20.04:latest \
-  tebako press --root=/mnt/w/fontist --entry-point=fontist --output=/mnt/w/fontist-package --Ruby=3.2.4
+  tebako press --root=/mnt/w/fontist --entry-point=fontist --output=/mnt/w/fontist-package --Ruby=3.2.11
 ----
 ====
 
@@ -775,7 +776,7 @@ You can package it to `./fontist-package` using the following command:
 $ docker run -it --rm -v $PWD:/mnt/w ghcr.io/tamatebako/tebako-<container_tag>:latest bash
 
 # Inside the container:
-$ tebako press --root=/mnt/w/fontist --entry-point=fontist --output=/mnt/w/fontist-package --Ruby=3.2.4
+$ tebako press --root=/mnt/w/fontist --entry-point=fontist --output=/mnt/w/fontist-package --Ruby=3.2.11
 ----
 ====
 
@@ -805,7 +806,7 @@ This is an example tebafile that sets values for prefix and Ruby options:
 ----
 options:
   prefix: /tmp/tebako
-  Ruby: 3.2.4
+  Ruby: 3.2.11
 ----
 ====
 
@@ -889,7 +890,7 @@ specified in Gemfile.
 | The version specified by `--Ruby` option if it is supported and satisfies Gemfile requirement; error otherwise
 | The minimal supported Ruby version that satisfies Gemfile requirement; error otherwise
 | *Not specified*
-| The version specified by `--Ruby` option if it is supported; error otherwise | Default Tebako Ruby version (3.3.7).
+| The version specified by `--Ruby` option if it is supported; error otherwise | Default Tebako Ruby version (4.0.6).
 
 |===
 
@@ -897,17 +898,14 @@ When bundler is used to package the application, the version of bundler that is 
 and the bundler version requirements specified in the Gemfile.
 
 .Package bundler version selection rules
-[cols="3", options="header"]
+[cols="2", options="header"]
 |===
 | Gemfile requirement
-|  Ruby version 2.7.8, 3.0.7
-|  Ruby version 3.1.x or above
+| Bundler version (Ruby 3.2 and above)
 
 | *Specified*
 | The maximum version that meets Gemfile requirement if it is >= 2.4.22 ; error otherwise
-| The maximum version that meets Gemfile requirement if it is >= 2.4.22 ; error otherwise
 | *Not specified*
-| 2.4.22
 | Default bundler version for this version of Ruby.
 
 |===
@@ -1065,8 +1063,8 @@ $ <bundle-package>
 ====
 [source,sh]
 ----
-$ tebako bundle create -o myproject-bundle -r ~/projects/myproject -R 3.4.1
-# => creates `myproject-bundle`, a bundle package for Ruby 3.4.1
+$ tebako bundle create -o myproject-bundle -r ~/projects/myproject -R 3.4.10
+# => creates `myproject-bundle`, a bundle package for Ruby 3.4.10
 $ myproject-bundle
 # => runs the bundle package
 ----
@@ -1107,8 +1105,8 @@ $ tebako press -m runtime -o <tebako-runtime-package> [-R <ruby-version>]
 ====
 [source,sh]
 ----
-$ tebako press -o tebako-ruby-3.4.1 -R 3.4.1
-# => creates `tebako-ruby-3.4.1`, a Tebako runtime package for Ruby 3.4.1
+$ tebako press -o tebako-ruby-3.4.10 -R 3.4.10
+# => creates `tebako-ruby-3.4.10`, a Tebako runtime package for Ruby 3.4.10
 ----
 ====
 
@@ -1134,8 +1132,8 @@ $ tebako press -m application \
     -o tebako-application-package \
     -e start.rb \
     -r ~/projects/myproject \
-    -R 3.4.1
-# => creates `tebako-application-package`, a Tebako application package for Ruby 3.4.1
+    -R 3.4.10
+# => creates `tebako-application-package`, a Tebako application package for Ruby 3.4.10
 ----
 ====
 

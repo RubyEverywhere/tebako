@@ -111,7 +111,7 @@ class TebakoTest < Minitest::Test
   end
 
   def ruby_ver
-    ENV.fetch("RUBY_VER", "3.2.6")
+    ENV.fetch("RUBY_VER", "3.4.10")
   end
 
   def press_cmd(tebako, name, package, prefix, cwd = nil)

@@ -32,7 +32,7 @@ require "tebako/ruby_version"
 
 RSpec.describe Tebako::RubyVersionWithGemfile do
   let(:valid_gemfile_path) { "spec/fixtures/Gemfile" }
-  let(:ruby_version) { "3.2.6" }
+  let(:ruby_version) { "3.2.11" }
 
   before do
     # Create test Gemfile
@@ -73,22 +73,22 @@ RSpec.describe Tebako::RubyVersionWithGemfile do
       it "accepts matching Ruby version" do
         File.write(valid_gemfile_path, <<~GEMFILE)
           source 'https://rubygems.org'
-          ruby '3.2.6'
+          ruby '3.2.11'
         GEMFILE
 
         expect do
-          described_class.new("3.2.6", valid_gemfile_path)
+          described_class.new("3.2.11", valid_gemfile_path)
         end.not_to raise_error
       end
 
       it "raises error for version conflict" do
         File.write(valid_gemfile_path, <<~GEMFILE)
           source 'https://rubygems.org'
-          ruby '3.2.6'
+          ruby '3.2.11'
         GEMFILE
 
         expect do
-          described_class.new("3.1.0", valid_gemfile_path)
+          described_class.new("3.3.11", valid_gemfile_path)
         end.to raise_error(Tebako::Error) { |error| expect(error.error_code).to eq(116) }
       end
 
@@ -99,7 +99,7 @@ RSpec.describe Tebako::RubyVersionWithGemfile do
         GEMFILE
 
         expect do
-          described_class.new("3.2.6", valid_gemfile_path)
+          described_class.new("3.2.11", valid_gemfile_path)
         end.not_to raise_error
       end
     end
@@ -120,17 +120,17 @@ RSpec.describe Tebako::RubyVersionWithGemfile do
           GEMFILE
 
           instance = described_class.new(nil, valid_gemfile_path)
-          expect(instance.ruby_version).to eq("3.2.4")
+          expect(instance.ruby_version).to eq("3.2.11")
         end
 
         it "uses exact version for = requirement" do
           File.write(valid_gemfile_path, <<~GEMFILE)
             source 'https://rubygems.org'
-            ruby '= 3.2.6'
+            ruby '= 3.2.11'
           GEMFILE
 
           instance = described_class.new(nil, valid_gemfile_path)
-          expect(instance.ruby_version).to eq("3.2.6")
+          expect(instance.ruby_version).to eq("3.2.11")
         end
 
         it "raises error for unsatisfiable version requirement" do

@@ -192,7 +192,7 @@ To run Tebako, a Ruby development environment is required.
 The simplest option is to use the Ruby development environment provided by
 https://rubyinstaller.org[RubyInstaller].
 
-For example, Ruby+Devkit 3.3.7-1.
+For example, Ruby+Devkit 3.4.10-1.
 
 ==== MinGW ucrt64
 

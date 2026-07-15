@@ -35,7 +35,7 @@ RSpec.describe Tebako::Packager do
     let(:src_dir) { "/path/to/src" }
     let(:package_src_dir) { "/path/to/package/src" }
     let(:app_name) { "my_app" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.5") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
 
     before do
       allow(Tebako::Packager).to receive(:create_def)
@@ -60,7 +60,7 @@ RSpec.describe Tebako::Packager do
   describe "#deploy" do
     let(:target_dir) { "/path/to/target" }
     let(:pre_dir) { "/path/to/pre" }
-    let(:ruby_ver) { "2.7.2" }
+    let(:ruby_ver) { "3.3.11" }
     let(:fs_root) { "/path/to/fs_root" }
     let(:fs_entrance) { "/path/to/fs_entrance" }
     let(:cwd) { "/path/to/cwd" }
@@ -99,7 +99,7 @@ RSpec.describe Tebako::Packager do
   describe "#finalize" do
     let(:src_dir) { "/path/to/src" }
     let(:app_name) { "my_app" }
-    let(:ruby_ver) { "2.7.2" }
+    let(:ruby_ver) { "3.3.11" }
     let(:patchelf) { "/usr/bin/patchelf" }
     let(:ruby_builder) { instance_double(Tebako::RubyBuilder) }
 
@@ -198,7 +198,7 @@ RSpec.describe Tebako::Packager do
     let(:ruby_source_dir) { "/path/to/ruby_source" }
     let(:mount_point) { "/__tebako_memfs__" }
     let(:src_dir) { "/path/to/src" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
     let(:patch_map) { { "file1" => "patch1", "file2" => "patch2" } }
 
     before do
@@ -248,7 +248,7 @@ RSpec.describe Tebako::Packager do
     let(:ostype) { "linux-gnu" }
     let(:ruby_source_dir) { "/path/to/ruby_source" }
     let(:deps_lib_dir) { "/path/to/deps/lib" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
     let(:patch_map) { { "file1" => "patch1", "file2" => "patch2" } }
 
     before do
@@ -266,7 +266,7 @@ RSpec.describe Tebako::Packager do
     let(:stash_dir) { "/path/to/stash" }
     let(:src_dir) { "/path/to/src" }
     let(:ruby_source_dir) { "/path/to/ruby_source" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
 
     before do
       allow(Tebako::Packager::PatchHelpers).to receive(:recreate)

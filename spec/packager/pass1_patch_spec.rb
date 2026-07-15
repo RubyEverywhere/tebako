@@ -28,7 +28,7 @@
 RSpec.describe Tebako::Packager do
   describe ".crt_pass1_patch" do
     let(:mount_point) { "/mnt" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
 
     it "returns Pass1DarwinPatch for darwin os_type" do
       patch = described_class.crt_pass1_patch("darwin", mount_point, ruby_ver)
@@ -51,7 +51,7 @@ RSpec.describe Tebako::Packager::Pass1Patch do # rubocop:disable Metrics/BlockLe
   let(:mount_point) { "/mnt" }
 
   describe "#initialize" do
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
     let(:patch) { described_class.new(mount_point, ruby_ver) }
 
     it "initializes with mount_point and ruby_ver" do
@@ -74,20 +74,22 @@ RSpec.describe Tebako::Packager::Pass1Patch do # rubocop:disable Metrics/BlockLe
     end
 
     context "when ruby_ver is not ruby34 and is ruby3x" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
       let(:patch) { described_class.new(mount_point, ruby_ver) }
 
       it "includes additional patches for ruby3x" do
         expected_patch_map = base_patch_map.merge(
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH
+          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH,
+          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
+          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH
         )
         expect(patch.patch_map).to eq(expected_patch_map)
       end
     end
 
     context "when ruby_ver is ruby34" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.1") }
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.10") }
       let(:patch) { described_class.new(mount_point, ruby_ver) }
 
       it "does not include additional patches for ruby3x" do
@@ -96,25 +98,8 @@ RSpec.describe Tebako::Packager::Pass1Patch do # rubocop:disable Metrics/BlockLe
       end
     end
 
-    context "when ruby_ver is not  ruby3x" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("2.7.8") }
-      let(:patch) { described_class.new(mount_point, ruby_ver) }
-
-      before do
-        stub_const("RUBY_PLATFORM", "x86_64-linux")
-      end
-
-      it "does not include additional patches for ruby3x" do
-        expected_patch_map = base_patch_map.merge(
-          "enc/jis/props.h" => described_class::ENC_JIS_PROPS_H_PATCH,
-          "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH
-        )
-        expect(patch.patch_map).to eq(expected_patch_map)
-      end
-    end
-
     it "returns a frozen hash" do
-      ruby_ver = Tebako::RubyVersion.new("3.3.6")
+      ruby_ver = Tebako::RubyVersion.new("3.3.11")
       patch = described_class.new(mount_point, ruby_ver)
       expect(patch.patch_map).to be_frozen
     end
@@ -147,14 +132,16 @@ RSpec.describe Tebako::Packager::Pass1DarwinPatch do # rubocop:disable Metrics/B
     end
 
     context "when ruby_ver is not ruby34 and is ruby3x" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
       let(:patch) { described_class.new(mount_point, ruby_ver) }
 
       it "includes additional patches for MacOs" do
         expected_patch_map = base_patch_map.merge(
           "configure" => described_class::DARWIN_CONFIGURE_PATCH,
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH
+          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH,
+          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
+          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH
         )
         expect(patch.patch_map).to eq(expected_patch_map)
       end
@@ -177,7 +164,7 @@ RSpec.describe Tebako::Packager::Pass1MSysPatch do # rubocop:disable Metrics/Blo
   end
 
   describe "#initialize" do
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
     let(:patch) { described_class.new(mount_point, ruby_ver) }
 
     it "initializes with mount_point and ruby_ver" do
@@ -187,29 +174,15 @@ RSpec.describe Tebako::Packager::Pass1MSysPatch do # rubocop:disable Metrics/Blo
   end
 
   describe "#patch_map" do # rubocop:disable Metrics/BlockLength
-    context "when ruby_ver is not ruby34 and is ruby3x" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    context "when ruby version is 3.3.7 or newer" do
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
       let(:patch) { described_class.new(mount_point, ruby_ver) }
 
-      it "includes additional patches for MSys and ruby3x" do
+      it "includes additional patches for MSys and ruby 3.3.7+" do
         expected_patch_map = base_patch_map.merge(
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH,
-          "cygwin/GNUmakefile.in" => patch.send(:gnumakefile_in_patch_p1),
-          "ext/io/console/win32_vk.inc" => described_class::EXT_IO_CONSOLE_WIN32_VK_INC_PATCH,
-          "ext/openssl/extconf.rb" => described_class::OPENSSL_EXTCONF_RB_PATCH
-        )
-        expect(patch.patch_map).to eq(expected_patch_map)
-      end
-    end
-
-    context "when ruby version is 3.3.7" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.3.7") }
-      let(:patch) { described_class.new(mount_point, ruby_ver) }
-
-      it "includes additional patches for MSys and ruby 3.3.7" do
-        expected_patch_map = base_patch_map.merge(
-          "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
+          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
+          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH,
           "cygwin/GNUmakefile.in" => patch.send(:gnumakefile_in_patch_p1),
           "ext/io/console/win32_vk.inc" => described_class::EXT_IO_CONSOLE_WIN32_VK_INC_PATCH,
           "ext/openssl/extconf.rb" => described_class::OPENSSL_EXTCONF_RB_PATCH,
@@ -221,12 +194,14 @@ RSpec.describe Tebako::Packager::Pass1MSysPatch do # rubocop:disable Metrics/Blo
       end
     end
 
-    context "when ruby version is 3.4.1" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.1") }
+    context "when ruby version is 3.4.10" do
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.10") }
       let(:patch) { described_class.new(mount_point, ruby_ver) }
 
-      it "includes additional patches for MSys and ruby 3.4.1" do
+      it "includes additional patches for MSys and ruby 3.4.10" do
         expected_patch_map = base_patch_map.merge(
+          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
+          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH,
           "cygwin/GNUmakefile.in" => patch.send(:gnumakefile_in_patch_p1),
           "ext/io/console/win32_vk.inc" => described_class::EXT_IO_CONSOLE_WIN32_VK_INC_PATCH,
           "ext/openssl/extconf.rb" => described_class::OPENSSL_EXTCONF_RB_PATCH,

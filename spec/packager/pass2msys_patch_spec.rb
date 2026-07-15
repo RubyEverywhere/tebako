@@ -31,7 +31,7 @@ require_relative "../../lib/tebako/packager/pass2msys_patch"
 RSpec.describe Tebako::Packager::Pass2MSysPatch do
   let(:ostype) { "msys" }
   let(:deps_lib_dir) { "/usr/lib" }
-  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.5") }
+  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
   let(:patch) { described_class.new(ostype, deps_lib_dir, ruby_ver) }
 
   describe "#patch_map" do
@@ -79,7 +79,7 @@ RSpec.describe Tebako::Packager::Pass2MSysPatch do
     end
 
     context "when ruby version is 3.2" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.2.6") }
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
 
       include_examples "common patches"
 
@@ -96,23 +96,6 @@ RSpec.describe Tebako::Packager::Pass2MSysPatch do
       end
     end
 
-    context "when ruby version is not 3.2" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.1.6") }
-
-      include_examples "common patches"
-
-      it "uses @OBJEXT@ for object extension" do
-        result = patch.send(:gnumakefile_in_patch_p2)
-
-        expect(result).to include(
-          "$(WPROGRAM): $(RUBYW_INSTALL_NAME).res.@OBJEXT@" =>
-            "$(WPROGRAM): $(RUBYW_INSTALL_NAME).res.@OBJEXT@ $(WINMAINOBJ)  # tebako patched",
-          "$(PROGRAM): $(RUBY_INSTALL_NAME).res.@OBJEXT@" =>
-            "$(PROGRAM): $(RUBY_INSTALL_NAME).res.@OBJEXT@ $(LIBRUBY_A) # tebako patched\n" \
-            "$(LIBRUBY_A): $(LIBRUBY_A_OBJS) $(INITOBJS) # tebako patched\n"
-        )
-      end
-    end
   end
 end
 

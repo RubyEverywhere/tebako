@@ -37,8 +37,8 @@ RSpec.describe Tebako::CliHelpers do
     { "output" => "/path/to/output", "deps" => "/path/to/deps", "entry-point" => "entrypoint",
       "root" => "/tmp/path/to/root/" }
   end
-  let(:ruby_ver) { "3.2.6" }
-  let(:ruby_hash) { Tebako::RubyVersion::RUBY_VERSIONS["3.2.6"] }
+  let(:ruby_ver) { "3.2.11" }
+  let(:ruby_hash) { Tebako::RubyVersion::RUBY_VERSIONS["3.2.11"] }
 
   before do
     allow_any_instance_of(Pathname).to receive(:realpath) { |instance| instance }

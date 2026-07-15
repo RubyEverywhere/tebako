@@ -34,7 +34,7 @@ RSpec.describe Tebako::PackagerLite do
   let(:options_manager) do
     double("OptionsManager", stash_dir: "/tmp/stash", data_src_dir: "/tmp/src", data_pre_dir: "/tmp/pre",
                              data_bin_dir: "/tmp/bin", deps_bin_dir: "/tmp/deps_bin", mode: "both",
-                             package: "test_package", rv: "3.2.5", ruby_ver: "3.2.5", root: "/", cwd: "/app",
+                             package: "test_package", rv: "3.2.11", ruby_ver: "3.2.11", root: "/", cwd: "/app",
                              ruby_src_dir: "/tmp/ruby_src", output_type_second: "application package")
   end
   let(:scenario_manager) { double("ScenarioManager", fs_entrance: "/entry") }
@@ -99,7 +99,7 @@ RSpec.describe Tebako::PackagerLite do
         packager_lite.deploy
         expect(packager_lite).to have_received(:create_implib)
         expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
-        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.5", "/", "/entry", "/app")
+        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app")
       end
     end
 
@@ -112,7 +112,7 @@ RSpec.describe Tebako::PackagerLite do
         packager_lite.deploy
         expect(packager_lite).not_to have_received(:create_implib)
         expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
-        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.5", "/", "/entry", "/app")
+        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app")
       end
     end
   end

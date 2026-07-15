@@ -32,9 +32,9 @@ require_relative "error"
 
 # Tebako - an executable packager
 module Tebako
-  # Magic version numbers used to ensure compatibility for Ruby 2.7.x, 3.0.x
-  # These are the minimal versions required to provide linux-gnu / linux-musl differentiation by bundler
-  # Ruby 3.1+ default rubygems versions work correctly out of the box
+  # Minimum bundler / rubygems versions tebako pins when it has to install or update them
+  # (e.g. Gemfile-driven bundler resolution). These provide correct linux-gnu / linux-musl
+  # differentiation by bundler; supported Ruby lines (3.2+) ship compatible rubygems by default.
   BUNDLER_VERSION = "2.4.22"
   RUBYGEMS_VERSION = "3.4.22"
 

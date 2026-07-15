@@ -30,7 +30,7 @@ RSpec.describe Tebako::Packager do
   describe ".crt_pass2_patch" do
     let(:ostype) { "linux-gnu" }
     let(:deps_lib_dir) { "/usr/lib" }
-    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+    let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
 
     context "when on msys platform" do
       before do
@@ -59,7 +59,7 @@ end
 RSpec.describe Tebako::Packager::Pass2Patch do
   let(:ostype) { "linux-gnu" }
   let(:deps_lib_dir) { "/usr/lib" }
-  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
   let(:patch) { described_class.new(ostype, deps_lib_dir, ruby_ver) }
   let(:scmb) { Tebako::ScenarioManagerBase.new("linux-gnu") }
 
@@ -86,7 +86,7 @@ RSpec.describe Tebako::Packager::Pass2Patch do
     end
 
     context "when ruby version is 3.4" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.1") }
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.4.10") }
 
       it "includes prism_compile.c patch" do
         expect(patch.patch_map).to include("prism_compile.c" => described_class::PRISM_PATCHES)
@@ -125,20 +125,11 @@ RSpec.describe Tebako::Packager::Pass2Patch do
       before { allow(scmb).to receive(:msys?).and_return(true) }
 
       context "when ruby version is 3.2" do
-        let(:ruby_ver) { Tebako::RubyVersion.new("3.2.5") }
+        let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
 
         it "includes msys patch for ruby 3.2" do
           patch_result = patch.send(:dln_c_patch)
           expect(patch_result).to include(described_class::DLN_C_MSYS_PATCH)
-        end
-      end
-
-      context "when ruby version is pre-3.2" do
-        let(:ruby_ver) { Tebako::RubyVersion.new("3.1.6") }
-
-        it "includes msys patch for pre-3.2" do
-          patch_result = patch.send(:dln_c_patch)
-          expect(patch_result).to include(described_class::DLN_C_MSYS_PATCH_PRE32)
         end
       end
     end
@@ -156,22 +147,12 @@ RSpec.describe Tebako::Packager::Pass2Patch do
   end
 
   describe "#util_c_patch" do
-    context "when ruby version is 3.1" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.1.6") }
+    context "when ruby version is 3.1 or newer" do
+      let(:ruby_ver) { Tebako::RubyVersion.new("3.2.11") }
 
-      it "uses post-pattern for ruby 3.1" do
+      it "uses post-pattern for ruby 3.1+" do
         expect(Tebako::Packager::PatchHelpers).to receive(:patch_c_file_post)
           .with("#endif /* !HAVE_GNU_QSORT_R */")
-        patch.send(:util_c_patch)
-      end
-    end
-
-    context "when ruby version is not 3.1" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("3.0.7") }
-
-      it "uses pre-pattern for non-ruby 3.1" do
-        expect(Tebako::Packager::PatchHelpers).to receive(:patch_c_file_pre)
-          .with("#ifndef S_ISDIR")
         patch.send(:util_c_patch)
       end
     end
@@ -181,7 +162,7 @@ end
 RSpec.describe Tebako::Packager::Pass2NonMSysPatch do
   let(:ostype) { "linux-gnu" }
   let(:deps_lib_dir) { "/usr/lib" }
-  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.6") }
+  let(:ruby_ver) { Tebako::RubyVersion.new("3.3.11") }
   let(:patch) { described_class.new(ostype, deps_lib_dir, ruby_ver) }
 
   describe "#patch_map" do
@@ -199,14 +180,6 @@ RSpec.describe Tebako::Packager::Pass2NonMSysPatch do
     context "when ruby version is 3.3" do
       it "includes config.status patch" do
         expect(patch.patch_map).to include("config.status")
-      end
-    end
-
-    context "when ruby version is not 3.x" do
-      let(:ruby_ver) { Tebako::RubyVersion.new("2.7.8") }
-
-      it "does not include common.mk patch" do
-        expect(patch.patch_map).not_to include("common.mk")
       end
     end
   end

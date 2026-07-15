@@ -35,7 +35,13 @@ module Tebako
       def run_with_capture(args)
         args = args.compact
         puts "   ... @ #{args.join(" ")}"
-        out, st = Open3.capture2e(*args)
+        # Read merged stdout+stderr in the calling thread via IO.popen rather than
+        # Open3.capture2e: capture2e spawns a background reader thread that races and
+        # raises "stream closed in another thread (IOError)" on large-output builds
+        # (e.g. `make ruby`) under Ruby >= 4.0. Reading inline avoids that race.
+        out = +""
+        IO.popen(args, err: %i[child out]) { |io| io.each_line { |line| out << line } }
+        st = $? # rubocop:disable Style/SpecialGlobalVars
         raise Tebako::Error, "Failed to run #{args.join(" ")} (#{st}):\n #{out}" if st.signaled? || !st.exitstatus.zero?
 
         out

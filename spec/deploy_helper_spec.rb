@@ -56,7 +56,7 @@ RSpec.describe Tebako::DeployHelper do
   end
 
   describe "#bundle_config" do
-    let(:r_v) { "3.2.4" }
+    let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }
     let(:cwd) { "/current/working/dir" }
 
@@ -117,7 +117,7 @@ RSpec.describe Tebako::DeployHelper do
   end
 
   describe "#configure" do
-    let(:r_v) { "3.2.6" }
+    let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }
     let(:cwd) { "/current/working/dir" }
 
@@ -172,7 +172,7 @@ RSpec.describe Tebako::DeployHelper do
 
   describe "#check_entry_point" do
     let(:entry_point_root) { "/project/entry_points" }
-    let(:r_v) { "3.2.6" }
+    let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }
     let(:cwd) { "/current/working/dir" }
 
@@ -329,7 +329,7 @@ RSpec.describe Tebako::DeployHelper do
   describe "#copy_files" do
     let(:destination) { "/fake/dest" }
     let(:entry_point_root) { "/project/entry_points" }
-    let(:r_v) { "3.2.6" }
+    let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }
     let(:cwd) { "/current/working/dir" }
 
@@ -387,7 +387,7 @@ RSpec.describe Tebako::DeployHelper do
   end
 
   describe "#deploy" do
-    let(:r_v) { "3.2.6" }
+    let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }
 
     before do
@@ -779,19 +779,6 @@ RSpec.describe Tebako::DeployHelper do
 
       it "does not update rubygems" do
         expect(Tebako::BuildHelpers).not_to receive(:run_with_capture_v)
-        deploy_helper.update_rubygems
-      end
-    end
-
-    context "when ruby version is lower than 3.1" do
-      before do
-        allow(ruby_ver).to receive(:ruby31?).and_return(false)
-      end
-
-      it "updates rubygems to the specified version" do
-        expect(Open3).to receive(:capture2e)
-          .with("/path/to/gem", "update", "--no-doc", "--system", Tebako::RUBYGEMS_VERSION)
-          .and_return(["", double("status", signaled?: false, exitstatus: 0)])
         deploy_helper.update_rubygems
       end
     end

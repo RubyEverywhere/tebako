@@ -559,10 +559,10 @@ RSpec.describe Tebako::OptionsManager do
   end
 
   describe "#process_gemfile" do
-    let(:options) { { "Ruby" => "3.2.6" } }
+    let(:options) { { "Ruby" => "3.2.11" } }
     let(:options_manager) { described_class.new(options) }
     let(:gemfile_path) { "/path/to/Gemfile" }
-    let(:mock_ruby_ver) { "3.2.6" }
+    let(:mock_ruby_ver) { "3.2.11" }
     let(:mock_ruby_hash) { "some_hash_value" }
     let(:mock_rv) { instance_double(Tebako::RubyVersionWithGemfile) }
 
@@ -687,10 +687,10 @@ RSpec.describe Tebako::OptionsManager do
 
   describe "#ruby_src_dir" do
     context "when Ruby version is set" do
-      let(:options_manager) { Tebako::OptionsManager.new({ "Ruby" => "3.1.6" }) }
+      let(:options_manager) { Tebako::OptionsManager.new({ "Ruby" => "3.3.11" }) }
 
       it "returns Ruby source folder name" do
-        expected = "#{options_manager.deps}/src/_ruby_3.1.6"
+        expected = "#{options_manager.deps}/src/_ruby_3.3.11"
         expect(options_manager.ruby_src_dir).to eq(expected)
       end
     end
@@ -757,7 +757,7 @@ RSpec.describe Tebako::OptionsManager do
   describe "#stash_dir" do
     let(:options_manager) { Tebako::OptionsManager.new({}) }
     let(:fake_deps) { "/fake/deps" }
-    let(:ruby_ver) { "3.2.6" }
+    let(:ruby_ver) { "3.2.11" }
 
     before do
       allow(options_manager).to receive(:deps).and_return(fake_deps)
