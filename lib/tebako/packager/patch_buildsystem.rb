@@ -109,9 +109,14 @@ module Tebako
       end
 
       def get_config_status_patch(ostype, deps_lib_dir, ruby_ver)
+        # with_compression: true so rbconfig's MAINLIBS (used by mkmf have_func() conftest links
+        # during extension builds) force_loads the DwarFS (de)compressor libs. Since the v0.15
+        # split, libdwarfs_reader.a references dwarfs::block_decompressor (defined in
+        # libdwarfs_decompressor.a); omitting it made EVERY conftest fail to link, so every bundled
+        # gem fell back to its `static` compat shim and failed to compile under the real headers.
         {
           get_config_status_pattern(ostype) =>
-            "S[\"MAINLIBS\"]=\"#{PatchLibraries.mlibs(ostype, deps_lib_dir, ruby_ver, false)}\""
+            "S[\"MAINLIBS\"]=\"#{PatchLibraries.mlibs(ostype, deps_lib_dir, ruby_ver, true)}\""
         }
       end
     end

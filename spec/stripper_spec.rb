@@ -38,13 +38,21 @@ RSpec.describe Tebako::Stripper do
     let(:src_dir) { "/path/to/src" }
 
     before do
+      allow(scm).to receive(:macos?).and_return(false)
       allow(described_class).to receive(:strip_bs)
+      allow(described_class).to receive(:strip_dsym)
       allow(described_class).to receive(:strip_fi)
       allow(described_class).to receive(:strip_li)
     end
 
     it "calls strip_bs with the correct parameters" do
       expect(described_class).to receive(:strip_bs).with(src_dir)
+      described_class.strip(scm, src_dir)
+    end
+
+    it "removes .dSYM debug companions on macOS" do
+      allow(scm).to receive(:macos?).and_return(true)
+      expect(described_class).to receive(:strip_dsym).with(src_dir)
       described_class.strip(scm, src_dir)
     end
 

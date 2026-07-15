@@ -80,9 +80,7 @@ RSpec.describe Tebako::Packager::Pass1Patch do # rubocop:disable Metrics/BlockLe
       it "includes additional patches for ruby3x" do
         expected_patch_map = base_patch_map.merge(
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH,
-          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
-          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH
+          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH
         )
         expect(patch.patch_map).to eq(expected_patch_map)
       end
@@ -139,9 +137,7 @@ RSpec.describe Tebako::Packager::Pass1DarwinPatch do # rubocop:disable Metrics/B
         expected_patch_map = base_patch_map.merge(
           "configure" => described_class::DARWIN_CONFIGURE_PATCH,
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH,
-          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
-          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH
+          "lib/rubygems/openssl.rb" => described_class::RUBYGEMS_OPENSSL_RB_PATCH
         )
         expect(patch.patch_map).to eq(expected_patch_map)
       end
@@ -181,8 +177,6 @@ RSpec.describe Tebako::Packager::Pass1MSysPatch do # rubocop:disable Metrics/Blo
       it "includes additional patches for MSys and ruby 3.3.7+" do
         expected_patch_map = base_patch_map.merge(
           "ext/bigdecimal/bigdecimal.h" => described_class::EXT_BIGDECIMAL_BIGDECIMAL_H_PATCH,
-          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
-          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH,
           "cygwin/GNUmakefile.in" => patch.send(:gnumakefile_in_patch_p1),
           "ext/io/console/win32_vk.inc" => described_class::EXT_IO_CONSOLE_WIN32_VK_INC_PATCH,
           "ext/openssl/extconf.rb" => described_class::OPENSSL_EXTCONF_RB_PATCH,
@@ -200,8 +194,6 @@ RSpec.describe Tebako::Packager::Pass1MSysPatch do # rubocop:disable Metrics/Blo
 
       it "includes additional patches for MSys and ruby 3.4.10" do
         expected_patch_map = base_patch_map.merge(
-          "ext/strscan/strscan.c" => described_class::EXT_STRSCAN_STRSCAN_C_PATCH,
-          "ext/io/console/console.c" => described_class::EXT_IO_CONSOLE_CONSOLE_C_PATCH,
           "cygwin/GNUmakefile.in" => patch.send(:gnumakefile_in_patch_p1),
           "ext/io/console/win32_vk.inc" => described_class::EXT_IO_CONSOLE_WIN32_VK_INC_PATCH,
           "ext/openssl/extconf.rb" => described_class::OPENSSL_EXTCONF_RB_PATCH,

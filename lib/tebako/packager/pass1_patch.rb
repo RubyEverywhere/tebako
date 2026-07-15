@@ -126,45 +126,6 @@ module Tebako
           "/* tebako patched */ static const struct enc_property *onig_jis_property(const char *str, size_t len);"
       }.freeze
 
-      # clang >= 21 makes -Wimplicit-function-declaration fatal, which breaks mkmf's have_func()
-      # link-probes during the extension build. When a probe fails, the bundled default gem falls
-      # back to its `#ifndef HAVE_RB_*` compatibility shim (a `static` reimplementation), which then
-      # clashes with the real (non-static) declaration the same file includes:
-      #   error: static declaration of 'rb_reg_onig_match' follows non-static declaration
-      # These functions all exist in the Ruby we build, so predefine the HAVE_ macros to skip the shims.
-      EXT_STRSCAN_STRSCAN_C_PATCH = {
-        "#include \"ruby/re.h\"" => <<~SUBST
-          #include "ruby/re.h"
-
-          /* -- Start of tebako patch (clang-21 have_func compat) -- */
-          #ifndef HAVE_RB_REG_ONIG_MATCH
-          #define HAVE_RB_REG_ONIG_MATCH 1
-          #endif
-          /* -- End of tebako patch -- */
-        SUBST
-      }.freeze
-
-      EXT_IO_CONSOLE_CONSOLE_C_PATCH = {
-        "#include \"ruby/io.h\"" => <<~SUBST
-          #include "ruby/io.h"
-
-          /* -- Start of tebako patch (clang-21 have_func compat) -- */
-          #ifndef HAVE_RB_IO_CLOSED_P
-          #define HAVE_RB_IO_CLOSED_P 1
-          #endif
-          #ifndef HAVE_RB_IO_OPEN_DESCRIPTOR
-          #define HAVE_RB_IO_OPEN_DESCRIPTOR 1
-          #endif
-          #ifndef HAVE_RB_IO_DESCRIPTOR
-          #define HAVE_RB_IO_DESCRIPTOR 1
-          #endif
-          #ifndef HAVE_RB_IO_PATH
-          #define HAVE_RB_IO_PATH 1
-          #endif
-          /* -- End of tebako patch -- */
-        SUBST
-      }.freeze
-
       def initialize(mount_point, ruby_ver)
         super(mount_point)
         @ruby_ver = ruby_ver
@@ -208,14 +169,6 @@ module Tebako
         # ....................................................
         # fix onig_jis_property signature (gcc 15 compatibility issue)
         pm.store("enc/jis/props.h", ENC_JIS_PROPS_H_PATCH) unless @ruby_ver.ruby32?
-
-        # ....................................................
-        # clang-21 have_func() compat: predefine HAVE_ macros so bundled default gems don't fall
-        # back to conflicting `static` compat shims (see EXT_STRSCAN/EXT_IO_CONSOLE patches above).
-        if @ruby_ver.ruby33? || @ruby_ver.ruby34?
-          pm.store("ext/strscan/strscan.c", EXT_STRSCAN_STRSCAN_C_PATCH)
-          pm.store("ext/io/console/console.c", EXT_IO_CONSOLE_CONSOLE_C_PATCH)
-        end
 
         pm.freeze
       end

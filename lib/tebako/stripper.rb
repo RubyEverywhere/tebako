@@ -48,8 +48,17 @@ module Tebako
       def strip(scm, src_dir)
         puts "   ... stripping the output"
         strip_bs(src_dir)
+        strip_dsym(src_dir) if scm.macos?
         strip_fi(scm, src_dir)
         strip_li(scm, src_dir)
+      end
+
+      # Remove macOS .dSYM debug companions before stripping. They are external debug info
+      # (useless in the packaged memfs) and the DWARF Mach-O inside them is named "<ext>.bundle",
+      # so strip_li would try to `strip -S` it and fail with
+      # "string table not at the end of the file (can't be processed)".
+      def strip_dsym(src_dir)
+        Dir.glob(File.join(src_dir, "**", "*.dSYM")).each { |d| FileUtils.rm_rf(d) }
       end
 
       def strip_file(file_in, file_out = nil)
