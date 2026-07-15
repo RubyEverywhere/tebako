@@ -113,7 +113,7 @@ jobs:
           version: ${{ env.CACHE_VER }}
 
       - name: tebako setup
-        run: exe/tebako setup -D
+        run: exe/rbe-tebako setup -D
 
   tests-1:
     name: tests-1 ${{ matrix.env.os }}-${{ matrix.architecture.name }} Ruby ${{ matrix.package_ruby_ver }} CC ${{ matrix.env.CC }}

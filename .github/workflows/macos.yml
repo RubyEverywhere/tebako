@@ -105,7 +105,7 @@ jobs:
 
       - name: tebako setup
         run: |
-          ${{ github.workspace }}/exe/tebako setup -D
+          ${{ github.workspace }}/exe/rbe-tebako setup -D
 
   tests-1:
     name: tests-1 package Ruby ${{ matrix.package_ruby_ver }} on ${{ matrix.env.os }}, XCode ${{ matrix.env.xcode }}, Ruby ${{ matrix.ruby_ver }}

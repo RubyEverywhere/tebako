@@ -28,23 +28,25 @@
 require_relative "lib/tebako/version"
 
 Gem::Specification.new do |spec|
-  spec.name          = "tebako"
+  spec.name          = "rbe-tebako"
   spec.version       = Tebako::VERSION
-  spec.authors       = ["Ribose Inc."]
-  spec.email         = ["open.source@ribose.com"]
+  spec.authors       = ["Andrea Fomera", "Ribose Inc."]
+  spec.email         = ["andrea.fomera@gmail.com"]
   spec.license       = "BSD-2-Clause"
 
-  spec.summary = "Packager for Ruby executables"
+  spec.summary = "Packager for Ruby executables (RubyEverywhere fork of tebako)"
   spec.description = <<~SUM
-    Tebako is an executable packager. It packages a set of files into a single
-    executable binary that allows a user to run a selected file from the
-    packaged software as if it is a mounted filesystem.
+    rbe-tebako is the RubyEverywhere fork of tebako, an executable packager. It
+    packages a set of files into a single executable binary that allows a user
+    to run a selected file from the packaged software as if it is a mounted
+    filesystem. This fork targets Ruby 3.2 through 4.0.
   SUM
-  spec.homepage = "https://github.com/tamatebako/tebako"
-  spec.required_ruby_version = ">= 2.7.0"
+  spec.homepage = "https://github.com/RubyEverywhere/tebako"
+  spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/tamatebako/tebako"
+  spec.metadata["source_code_uri"] = "https://github.com/RubyEverywhere/tebako"
+  spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.

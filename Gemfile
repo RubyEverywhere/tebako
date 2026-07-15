@@ -27,5 +27,5 @@
 
 source "https://rubygems.org"
 
-# Specify your gem's dependencies in tebako.gemspec
+# Specify your gem's dependencies in rbe-tebako.gemspec
 gemspec
