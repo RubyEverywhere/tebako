@@ -58,6 +58,7 @@ tests-2/Gemfile.lock
 *-package
 metanorma-package
 tests/**/*.gem
+/*.gem
 packed-mn
 .package-ready
 extract/

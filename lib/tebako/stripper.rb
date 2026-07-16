@@ -75,6 +75,15 @@ module Tebako
         puts "Warning: could not strip #{file_in}:\n #{out}" unless st.exitstatus.zero?
       end
 
+      # `strip` drops the Mach-O code signature. On macOS (notably >= 26) the dynamic loader
+      # SIGKILLs any dlopen of an unsigned / invalidly-signed .bundle/.dylib with
+      # "Code Signature Invalid" — and tebako dlopens native extensions extracted from the
+      # memfs at runtime. Re-apply an ad-hoc signature so the stripped extensions still load.
+      def resign_macho(file)
+        _out, st = Open3.capture2e("codesign", "--force", "--sign", "-", file)
+        puts "Warning: could not ad-hoc re-sign #{file}" unless st.exitstatus.zero?
+      end
+
       private
 
       def get_files(scm)
@@ -110,6 +119,7 @@ module Tebako
             FileUtils.rm(file)
           elsif sext.include?(extension)
             strip_file(file)
+            resign_macho(file) if scm.macos?
           end
         end
       end
