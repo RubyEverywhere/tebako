@@ -32,7 +32,7 @@ module Tebako
   module Packager
     # Ruby patching definitions (pass2)
     module PatchLibraries
-      class << self
+      class << self # rubocop:disable Metrics/ClassLength
         # rubocop:disable Style/WordArray
         DARWIN_BREW_LIBS = [
           ["zlib", "z"],              ["gdbm", "gdbm"],           ["readline", "readline"], ["libffi", "ffi"],
@@ -40,13 +40,14 @@ module Tebako
           ["boost", "boost_chrono"],  ["double-conversion", "double-conversion"],
           # DwarFS v0.15 compression/hash deps (were staged into deps_lib_dir under the bridge)
           ["xxhash", "xxhash"],               ["zstd", "zstd"],
-          ["brotli", "brotlienc"],            ["brotli", "brotlidec"],            ["brotli", "brotlicommon"],
+          ["brotli", "brotlienc"],            ["brotli", "brotlidec"], ["brotli", "brotlicommon"],
           # DwarFS reader link deps
           ["boost", "boost_filesystem"],      ["boost", "boost_atomic"],
           ["boost", "boost_iostreams"],       ["boost", "boost_program_options"],
           ["boost", "boost_context"],         ["boost", "boost_regex"],
           ["boost", "boost_thread"],
-          ["flac", "FLAC"],                   ["flac", "FLAC++"],
+          ["fmt", "fmt"],
+          ["flac", "FLAC"], ["flac", "FLAC++"],
           ["libogg", "ogg"]
         ].freeze
 
@@ -55,8 +56,8 @@ module Tebako
         DARWIN_BREW_LIBS_31 = [["openssl@3", "ssl"], ["openssl@3", "crypto"]].freeze
 
         # DwarFS v0.15 split static libs (installed to deps_lib_dir by libdwarfs). folly/fbthrift
-        # are gone; the thrift/fsst/frozen libs are now real .a files. glog/gflags/fmt are no
-        # longer linked (fmt is header-only / baked into the DwarFS libs).
+        # are gone; the thrift/fsst/frozen libs are now real .a files. glog/gflags are no longer
+        # linked. fmt remains a compiled dependency of the DwarFS reader/common archives.
         DARWIN_DEP_LIBS_1 = [
           "dwarfs_reader", "dwarfs_common",
           "dwarfs_fsst", "dwarfs_frozen", "dwarfs_thrift_lite_v2",
@@ -139,7 +140,7 @@ module Tebako
           brew_libs.each { |lib| libs << "#{PatchHelpers.get_prefix_macos(lib[0]).chop}/lib/lib#{lib[1]}.a " }
         end
 
-        def darwin_libraries(deps_lib_dir, ruby_ver, with_compression)
+        def darwin_libraries(deps_lib_dir, ruby_ver, with_compression) # rubocop:disable Metrics/MethodLength
           libs = String.new
 
           DARWIN_DEP_LIBS_1.each { |lib| libs << "#{deps_lib_dir}/lib#{lib}.a " }
@@ -151,7 +152,7 @@ module Tebako
           compression_lib =
             if with_compression
               "-force_load #{deps_lib_dir}/libdwarfs_decompressor.a " \
-              "-force_load #{deps_lib_dir}/libdwarfs_compressor.a"
+                "-force_load #{deps_lib_dir}/libdwarfs_compressor.a"
             else
               ""
             end
