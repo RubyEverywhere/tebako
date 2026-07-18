@@ -44,6 +44,26 @@ module Tebako
       end
     end
 
+    def import(runtime)
+      source = File.expand_path(runtime)
+      descriptor_source = Tebako::RuntimeDescriptor.path_for(source)
+      raise Tebako::Error.new("Finalized runtime does not exist: #{source}", 120) unless File.file?(source)
+      unless File.file?(descriptor_source)
+        raise Tebako::Error.new("Finalized runtime descriptor is missing: #{descriptor_source}", 120)
+      end
+
+      imported_descriptor = Tebako::RuntimeDescriptor.load(descriptor_source)
+      unless imported_descriptor.data == @descriptor.data
+        raise Tebako::Error.new("Finalized runtime descriptor is inconsistent", 120)
+      end
+
+      fetch do |target_base|
+        target = "#{target_base}#{@exe_suffix}"
+        FileUtils.cp(source, target, preserve: true)
+        FileUtils.cp(descriptor_source, Tebako::RuntimeDescriptor.path_for(target), preserve: true)
+      end
+    end
+
     private
 
     def publish(path)

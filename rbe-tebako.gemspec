@@ -45,7 +45,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/RubyEverywhere/tebako"
+  spec.metadata["source_code_uri"] = "#{spec.homepage}/tree/v#{spec.version}"
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
   # Specify which files should be added to the gem when it is released.

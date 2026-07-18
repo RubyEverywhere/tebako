@@ -85,11 +85,19 @@ module Tebako
       end
     end
 
-    desc "install SDK", "Verify and install a reusable Tebako runtime SDK"
+    desc "install SDK", "Verify, install, and activate a reusable Tebako runtime SDK"
     method_option :destination, type: :string, aliases: "-d", required: true
+    method_option :sha256, type: :string, required: false,
+                           desc: "Require the SDK archive to match this trusted SHA-256"
     def install(sdk)
-      manifest = Tebako::RuntimeSdk.install(archive: sdk, destination: options["destination"])
-      puts "Installed runtime SDK #{manifest.fetch("runtime_identity")} at #{File.expand_path(options["destination"])}"
+      manifest = Tebako::RuntimeSdk.install(
+        archive: sdk,
+        destination: options["destination"],
+        expected_sha256: options["sha256"]
+      )
+      destination = File.expand_path(options["destination"])
+      puts "Installed runtime SDK #{manifest.fetch("runtime_identity")} at #{destination}"
+      puts "Use this SDK for press commands with TEBAKO_PREFIX=#{destination}"
     rescue Tebako::Error => e
       raise Thor::Error, e.message
     end
@@ -97,14 +105,31 @@ module Tebako
     no_commands do
       def export_sdk(options_manager, scenario, descriptor)
         runtime = "#{options_manager.package}#{scenario.exe_suffix}"
+        runtime_path = "runtime/#{File.basename(runtime)}"
         components = {
-          "runtime/#{File.basename(runtime)}" => runtime,
-          "runtime/#{File.basename(runtime)}.runtime.json" => Tebako::RuntimeDescriptor.path_for(runtime),
-          "deps/#{File.basename(options_manager.stash_dir)}" => options_manager.stash_dir,
-          "deps/bin" => options_manager.deps_bin_dir,
-          "deps/lib" => options_manager.deps_lib_dir
+          runtime_path => runtime,
+          Tebako::RuntimeDescriptor.path_for(runtime_path) => Tebako::RuntimeDescriptor.path_for(runtime)
         }
-        Tebako::RuntimeSdk.pack(output: options["sdk-output"], components: components, descriptor: descriptor)
+        sdk_dependency_paths(options_manager).each do |path|
+          components["deps/#{path.delete_prefix("#{options_manager.deps}/")}"] = path
+        end
+        sdk = options["sdk-output"]
+        Tebako::RuntimeSdk.pack(
+          output: sdk,
+          components: components,
+          descriptor: descriptor,
+          runtime_path: runtime_path,
+          build_prefix: options_manager.prefix
+        )
+        checksum = Tebako::RuntimeSdk.write_checksum(sdk)
+        puts "Created runtime SDK checksum at #{checksum}"
+      end
+
+      def sdk_dependency_paths(options_manager)
+        paths = %w[bin include lib share share.dummy].map { |name| File.join(options_manager.deps, name) }
+        paths << options_manager.stash_dir
+        paths << options_manager.ruby_src_dir
+        paths.select { |path| File.exist?(path) }
       end
     end
   end

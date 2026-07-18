@@ -46,6 +46,70 @@ RSpec.describe Tebako::RuntimeSdk do
     end
   end
 
+  it "checks a trusted archive digest and activates the packaged runtime cache" do
+    Dir.mktmpdir do |root|
+      runtime = File.join(root, "tebako-runtime")
+      runtime_path = "runtime/tebako-runtime"
+      archive = File.join(root, "runtime-sdk.tar.gz")
+      checksum = "#{archive}.sha256"
+      destination = File.join(root, "installed")
+      File.binwrite(runtime, "native runtime")
+      descriptor.write(Tebako::RuntimeDescriptor.path_for(runtime))
+
+      described_class.pack(
+        output: archive,
+        components: {
+          runtime_path => runtime,
+          Tebako::RuntimeDescriptor.path_for(runtime_path) => Tebako::RuntimeDescriptor.path_for(runtime)
+        },
+        descriptor: descriptor,
+        runtime_path: runtime_path
+      )
+      described_class.write_checksum(archive)
+      expected_sha256 = File.binread(checksum).split.first
+      manifest = described_class.install(
+        archive: archive,
+        destination: destination,
+        expected_sha256: "sha256:#{expected_sha256}"
+      )
+
+      cache = Tebako::FinalizedRuntimeCache.new(
+        cache_dir: File.join(destination, "deps", "finalized-runtime-cache"),
+        descriptor: descriptor
+      )
+      cached_runtime = cache.fetch { raise "the SDK runtime should already be activated" }
+
+      expect(manifest.fetch("runtime_path")).to eq(runtime_path)
+      expect(File.binread(cached_runtime)).to eq("native runtime")
+      expect(File.binread(checksum)).to eq("#{expected_sha256}  runtime-sdk.tar.gz\n")
+      expect(File.binread(File.join(destination, "deps", Tebako::CacheManager::E_VERSION_FILE))).to eq(
+        "#{Tebako::VERSION} at #{File.expand_path("..", __dir__)}"
+      )
+    end
+  end
+
+  it "rejects an untrusted archive digest without replacing an existing install" do
+    Dir.mktmpdir do |root|
+      component = File.join(root, "component")
+      archive = File.join(root, "runtime-sdk.tar.gz")
+      destination = File.join(root, "installed")
+      FileUtils.mkdir_p(component)
+      File.binwrite(File.join(component, "tool"), "tool")
+      FileUtils.mkdir_p(destination)
+      File.binwrite(File.join(destination, "keep"), "safe")
+      described_class.pack(
+        output: archive,
+        components: { "deps" => component },
+        descriptor: descriptor
+      )
+
+      expect do
+        described_class.install(archive: archive, destination: destination, expected_sha256: "0" * 64)
+      end.to raise_error(Tebako::Error, /SHA-256 mismatch/)
+      expect(File.binread(File.join(destination, "keep"))).to eq("safe")
+    end
+  end
+
   it "rejects a corrupted archive without replacing an existing install" do
     Dir.mktmpdir do |root|
       component = File.join(root, "component")

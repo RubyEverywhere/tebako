@@ -673,33 +673,65 @@ edits never enter the runtime build:
 
 [source,sh]
 ----
-tebako runtime build \
+rbe-tebako runtime build \
   --Ruby=4.0.6 \
   --output=build/tebako-runtime \
   --sdk-output=build/tebako-runtime-sdk.tar.gz
 
-tebako runtime install build/tebako-runtime-sdk.tar.gz \
-  --destination=$HOME/.tebako/runtime-sdk
+SDK_SHA256="$(cut -d' ' -f1 build/tebako-runtime-sdk.tar.gz.sha256)"
+rbe-tebako runtime install build/tebako-runtime-sdk.tar.gz \
+  --destination=$HOME/.tebako/runtime-sdk \
+  --sha256="$SDK_SHA256"
 
-tebako application build \
-  --runtime=build/tebako-runtime \
+rbe-tebako application build \
+  --prefix=$HOME/.tebako/runtime-sdk \
+  --runtime=$HOME/.tebako/runtime-sdk/runtime/tebako-runtime \
   --root=. \
   --entry-point=bin/my-app \
   --output=build/my-app \
   --explain
 ----
 
-SDK installation verifies the archive manifest and file checksums before
-atomically replacing an existing installation. Tebako also exposes cache and
-package diagnostics:
+`runtime build --sdk-output` writes the SDK and a conventional adjacent
+`.sha256` checksum file. Distribute or pin that digest through a trusted channel;
+a checksum downloaded from the same untrusted location as the SDK provides
+corruption detection, not publisher authentication.
++
+SDK installation checks the trusted SHA-256 before extracting anything, verifies
+the archive manifest and individual file checksums, and atomically replaces the
+selected installation. It relocates text-based build configuration from the
+producer's prefix to the installation prefix, registers the packaged runtime in
+the finalized-runtime cache, and includes the prepared Ruby link tree needed for
+fast signable single-file assembly on macOS.
++
+Set `TEBAKO_PREFIX` to the installation root to make ordinary `press` commands
+reuse the SDK runtime without adding SDK-specific arguments:
 
 [source,sh]
 ----
-tebako cache stats
-tebako cache verify
-tebako cache prune --max-size=20GB
-tebako package inspect build/my-app.tebako
-tebako package verify build/my-app.tebako
+export TEBAKO_PREFIX=$HOME/.tebako/runtime-sdk
+rbe-tebako press \
+  --Ruby=4.0.6 \
+  --root=. \
+  --entry-point=bin/my-app \
+  --output=build/my-app \
+  --explain
+----
+
+The runtime is reused only when its descriptor matches the current platform,
+architecture, Ruby version, Tebako source, compression and logging options, and
+native build environment. A mismatch is safe: Tebako builds and caches a
+compatible runtime instead.
++
+Tebako also exposes cache and package diagnostics:
+
+[source,sh]
+----
+rbe-tebako cache stats
+rbe-tebako cache verify
+rbe-tebako cache prune --max-size=20GB
+rbe-tebako package inspect build/my-app.tebako
+rbe-tebako package verify build/my-app.tebako
 ----
 
 ==== Setup

@@ -71,5 +71,32 @@ RSpec.describe Tebako::FinalizedRuntimeCache do
       expect(File.binread(second)).to eq("second")
     end
   end
+
+  it "imports a described runtime into the verified cache" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "tebako-runtime")
+      File.binwrite(source, "imported runtime")
+      descriptor.write(Tebako::RuntimeDescriptor.path_for(source))
+      cache = described_class.new(cache_dir: File.join(directory, "cache"), descriptor: descriptor)
+
+      imported = cache.import(source)
+      reused = cache.fetch { raise "the imported runtime should be reused" }
+
+      expect(reused).to eq(imported)
+      expect(File.binread(reused)).to eq("imported runtime")
+      expect(Tebako::RuntimeDescriptor.load("#{reused}.runtime.json").data).to eq(descriptor.data)
+    end
+  end
+
+  it "rejects an import whose descriptor does not match the cache identity" do
+    Dir.mktmpdir do |directory|
+      source = File.join(directory, "tebako-runtime")
+      File.binwrite(source, "runtime")
+      descriptor("tebako-runtime-v1-other").write(Tebako::RuntimeDescriptor.path_for(source))
+      cache = described_class.new(cache_dir: File.join(directory, "cache"), descriptor: descriptor)
+
+      expect { cache.import(source) }.to raise_error(Tebako::Error, /descriptor is inconsistent/)
+    end
+  end
 end
 # rubocop:enable Metrics/BlockLength

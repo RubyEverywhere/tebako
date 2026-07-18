@@ -12,7 +12,9 @@ require "rubygems/package"
 require "securerandom"
 require "zlib"
 
+require_relative "cache_manager"
 require_relative "error"
+require_relative "finalized_runtime_cache"
 require_relative "runtime_descriptor"
 
 # rubocop:disable Metrics
@@ -24,9 +26,9 @@ module Tebako
     MANIFEST_PATH = "tebako-sdk-manifest.json"
 
     class << self
-      def pack(output:, components:, descriptor:)
+      def pack(output:, components:, descriptor:, runtime_path: nil, build_prefix: nil)
         entries = collect_entries(components)
-        manifest = sdk_manifest(entries, descriptor)
+        manifest = sdk_manifest(entries, descriptor, runtime_path, build_prefix)
         temporary = "#{output}.#{Process.pid}.#{SecureRandom.hex(6)}.tmp"
         FileUtils.mkdir_p(File.dirname(File.expand_path(output)))
         write_archive(temporary, entries, manifest)
@@ -36,15 +38,36 @@ module Tebako
         FileUtils.rm_f(temporary) if temporary
       end
 
-      def install(archive:, destination:)
+      def install(archive:, destination:, expected_sha256: nil)
+        verify_archive_checksum!(archive, expected_sha256) if expected_sha256
         temporary = "#{File.expand_path(destination)}.#{Process.pid}.#{SecureRandom.hex(6)}.tmp"
         FileUtils.rm_rf(temporary, secure: true)
         FileUtils.mkdir_p(temporary)
         manifest = extract_and_verify(archive, temporary)
+        relocate_install(temporary, manifest, destination)
+        activate_runtime(temporary, manifest) if manifest["runtime_path"]
+        register_environment(temporary)
         publish_install(temporary, destination)
         manifest
       ensure
         FileUtils.rm_rf(temporary, secure: true) if temporary && File.exist?(temporary)
+      end
+
+      def sha256(archive)
+        Digest::SHA256.file(archive).hexdigest
+      rescue SystemCallError => e
+        raise Tebako::Error.new("Unable to checksum runtime SDK: #{e.message}", 121)
+      end
+
+      def write_checksum(archive, output: "#{archive}.sha256")
+        digest = sha256(archive)
+        temporary = "#{output}.#{Process.pid}.#{SecureRandom.hex(6)}.tmp"
+        FileUtils.mkdir_p(File.dirname(File.expand_path(output)))
+        File.binwrite(temporary, "#{digest}  #{File.basename(archive)}\n")
+        File.rename(temporary, output)
+        output
+      ensure
+        FileUtils.rm_f(temporary) if temporary
       end
 
       private
@@ -82,13 +105,16 @@ module Tebako
         end
       end
 
-      def sdk_manifest(entries, descriptor)
-        {
+      def sdk_manifest(entries, descriptor, runtime_path, build_prefix)
+        manifest = {
           "schema_version" => SCHEMA_VERSION,
           "runtime_identity" => descriptor.identity,
           "runtime_descriptor" => descriptor.data,
-          "entries" => entries.map { |entry| entry.reject { |key, _value| key == "source" } }
+          "entries" => entries.map { |entry| entry.except("source") }
         }
+        manifest["runtime_path"] = validate_runtime_path!(runtime_path, manifest["entries"]) if runtime_path
+        manifest["build_prefix"] = validate_build_prefix!(build_prefix) if build_prefix
+        manifest
       end
 
       def write_archive(path, entries, manifest)
@@ -180,7 +206,95 @@ module Tebako
         expected = manifest.fetch("entries").to_h { |entry| [entry.fetch("path"), entry] }
         raise Tebako::Error.new("Runtime SDK contents do not match its manifest", 121) unless expected == extracted
 
-        Tebako::RuntimeDescriptor.new(manifest.fetch("runtime_descriptor"))
+        descriptor = Tebako::RuntimeDescriptor.new(manifest.fetch("runtime_descriptor"))
+        unless manifest["runtime_identity"] == descriptor.identity
+          raise Tebako::Error.new("Runtime SDK identity does not match its descriptor", 121)
+        end
+
+        validate_runtime_path!(manifest["runtime_path"], manifest.fetch("entries")) if manifest["runtime_path"]
+        validate_build_prefix!(manifest["build_prefix"]) if manifest["build_prefix"]
+        descriptor
+      end
+
+      def validate_runtime_path!(runtime_path, entries)
+        runtime_path = clean_archive_path(runtime_path)
+        entry = entries.find { |candidate| candidate["path"] == runtime_path }
+        unless entry && entry["type"] == "file"
+          raise Tebako::Error.new("Runtime SDK runtime is missing: #{runtime_path}", 121)
+        end
+
+        descriptor_path = Tebako::RuntimeDescriptor.path_for(runtime_path)
+        descriptor_entry = entries.find { |candidate| candidate["path"] == descriptor_path }
+        unless descriptor_entry && descriptor_entry["type"] == "file"
+          raise Tebako::Error.new("Runtime SDK descriptor is missing: #{descriptor_path}", 121)
+        end
+
+        runtime_path
+      end
+
+      def validate_build_prefix!(prefix)
+        prefix = prefix.to_s
+        unless Pathname.new(prefix).absolute?
+          raise Tebako::Error.new("Runtime SDK build prefix must be absolute: #{prefix.inspect}", 121)
+        end
+
+        File.expand_path(prefix)
+      end
+
+      def activate_runtime(root, manifest)
+        runtime = safe_destination(root, manifest.fetch("runtime_path"))
+        descriptor = Tebako::RuntimeDescriptor.new(manifest.fetch("runtime_descriptor"))
+        installed_descriptor = Tebako::RuntimeDescriptor.load(Tebako::RuntimeDescriptor.path_for(runtime))
+        unless installed_descriptor.data == descriptor.data
+          raise Tebako::Error.new("Runtime SDK installed descriptor is inconsistent", 121)
+        end
+
+        exe_suffix = File.extname(runtime).casecmp?(".exe") ? ".exe" : ""
+        cache = Tebako::FinalizedRuntimeCache.new(
+          cache_dir: File.join(root, "deps", "finalized-runtime-cache"),
+          descriptor: descriptor,
+          exe_suffix: exe_suffix
+        )
+        cache.import(runtime)
+      end
+
+      def relocate_install(root, manifest, destination)
+        source = manifest["build_prefix"]
+        return unless source
+
+        destination = File.expand_path(destination)
+        return if source == destination
+
+        manifest.fetch("entries").each do |entry|
+          next unless entry["type"] == "file" && entry["path"].start_with?("deps/")
+
+          path = safe_destination(root, entry.fetch("path"))
+          contents = File.binread(path)
+          next if contents.include?("\0") || !contents.include?(source)
+
+          File.binwrite(path, contents.gsub(source, destination))
+        end
+      rescue SystemCallError => e
+        raise Tebako::Error.new("Unable to relocate runtime SDK: #{e.message}", 121)
+      end
+
+      def register_environment(root)
+        source = File.expand_path("../..", __dir__)
+        version_file = File.join(root, "deps", Tebako::CacheManager::E_VERSION_FILE)
+        FileUtils.mkdir_p(File.dirname(version_file))
+        File.binwrite(version_file, "#{Tebako::VERSION} at #{source}")
+      end
+
+      def verify_archive_checksum!(archive, expected)
+        expected = expected.to_s.strip.delete_prefix("sha256:").downcase
+        unless expected.match?(/\A[0-9a-f]{64}\z/)
+          raise Tebako::Error.new("Invalid runtime SDK SHA-256: #{expected.inspect}", 121)
+        end
+
+        actual = sha256(archive)
+        return if actual == expected
+
+        raise Tebako::Error.new("Runtime SDK SHA-256 mismatch: expected #{expected}, got #{actual}", 121)
       end
 
       def create_safe_symlink(root, target, link)
