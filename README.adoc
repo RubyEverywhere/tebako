@@ -555,6 +555,40 @@ tebako press \
 ----
 ====
 
+===== Incremental presses
+
+Tebako keeps content-addressed DwarFS images under the Tebako prefix. Cache keys
+include file contents and modes, the DwarFS writer, the compression level, and
+package metadata; timestamps alone do not invalidate an image. Generated files
+are updated only when their contents change, and CMake rebuilds or relinks the
+runtime only when the packaged filesystem or native inputs change.
+
+In `both` mode, the application package is split into immutable application,
+executable, and gem filesystem layers. An application-only edit recompresses the
+application layer while reusing unchanged gem and executable layers. The
+matching runtime mounts those layers at startup. `application` mode continues
+to emit a monolithic image so it remains compatible with previously built
+runtime executables.
+
+The installed DwarFS writer does not expose a persistent compressed-chunk cache.
+Layer-sized, content-addressed images therefore provide incremental compression
+without changing the DwarFS format itself.
+
+To compare warm, unchanged, and application-changed presses on the same machine,
+run:
+
+[source,sh]
+----
+ruby benchmark/press.rb \
+  --root tests/test-00 \
+  --entry test.rb \
+  --prefix PWD
+----
+
+The command emits JSON timings, cache-hit counts, native-link reuse, and a
+runtime validation result. Keep the Ruby version, compression level, prefix,
+machine load, and application fixed when comparing revisions.
+
 ==== Setup
 
 Tebako requires post-install setup after gem installation .

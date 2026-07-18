@@ -31,12 +31,15 @@ require_relative "../lib/tebako/packager_lite"
 # rubocop:disable Metrics/BlockLength
 
 RSpec.describe Tebako::PackagerLite do
+  let(:ruby_version) { double("RubyVersion", api_version: "3.2.0") }
   let(:options_manager) do
     double("OptionsManager", stash_dir: "/tmp/stash", data_src_dir: "/tmp/src", data_pre_dir: "/tmp/pre",
                              data_bin_dir: "/tmp/bin", deps_bin_dir: "/tmp/deps_bin", mode: "both",
-                             package: "test_package", rv: "3.2.11", ruby_ver: "3.2.11", root: "/", cwd: "/app",
+                             package: "test_package", rv: ruby_version, ruby_ver: "3.2.11",
+                             root: "/", cwd: "/app",
                              ruby_src_dir: "/tmp/ruby_src", output_type_second: "application package",
                              bundle_cache_dir: "/tmp/bundle-cache",
+                             filesystem_cache_dir: "/tmp/filesystem-cache",
                              compression_level: 5)
   end
   let(:scenario_manager) { double("ScenarioManager", fs_entrance: "/entry") }
@@ -72,6 +75,7 @@ RSpec.describe Tebako::PackagerLite do
 
     before do
       allow(packager_lite).to receive(:codegen).and_return("codegen_result")
+      allow(packager_lite).to receive(:layered?).and_return(false)
       allow(scenario_manager).to receive(:msys?).and_return(true)
       allow(Tebako::Packager).to receive(:create_def)
       allow(Tebako::Packager).to receive(:create_implib)
@@ -81,13 +85,34 @@ RSpec.describe Tebako::PackagerLite do
       packager_lite.create_package
       expect(FileUtils).to have_received(:rm_f).with("test_package.tebako")
       expect(Tebako::Packager).to have_received(:mkdwarfs).with("/tmp/deps_bin", "test_package.tebako", "/tmp/src",
-                                                                "codegen_result", 5)
+                                                                "codegen_result", 5, "/tmp/filesystem-cache")
     end
 
     it "prints the correct completion message" do
       expect { packager_lite.create_package }.to output(
         /Created tebako application package at "test_package\.tebako"/
       ).to_stdout
+    end
+
+    it "compresses and assembles independently cached layers in both mode" do
+      allow(packager_lite).to receive(:layered?).and_call_original
+      allow(Dir).to receive(:exist?).and_return(false)
+      allow(Dir).to receive(:exist?).with("/tmp/src/local").and_return(true)
+      allow(Dir).to receive(:exist?).with("/tmp/src/lib/ruby/gems/3.2.0").and_return(true)
+      allow(Tebako::LayeredPackage).to receive(:write)
+
+      packager_lite.create_package
+
+      expect(Tebako::Packager).to have_received(:mkdwarfs)
+        .with("/tmp/deps_bin", "/tmp/bin/layers/local.dwarfs", "/tmp/src/local", nil, 5, "/tmp/filesystem-cache")
+      expect(Tebako::Packager).to have_received(:mkdwarfs)
+        .with("/tmp/deps_bin", "/tmp/bin/layers/lib-ruby-gems-3.2.0.dwarfs",
+              "/tmp/src/lib/ruby/gems/3.2.0", nil, 5, "/tmp/filesystem-cache")
+      expect(Tebako::LayeredPackage).to have_received(:write) do |output, descriptor:, layers:|
+        expect(output).to eq("test_package.tebako")
+        expect(descriptor).to eq("codegen_result")
+        expect(layers.map(&:mount_point)).to eq(["local", "lib/ruby/gems/3.2.0"])
+      end
     end
   end
 
@@ -100,9 +125,10 @@ RSpec.describe Tebako::PackagerLite do
         allow(scenario_manager).to receive(:msys?).and_return(true)
         packager_lite.deploy
         expect(packager_lite).to have_received(:create_implib)
-        expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
+        expect(Tebako::Packager).to have_received(:init)
+          .with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin", preserve_bin: true)
         expect(Tebako::Packager).to have_received(:deploy)
-          .with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app", "/tmp/bundle-cache")
+          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache")
       end
     end
 
@@ -114,9 +140,10 @@ RSpec.describe Tebako::PackagerLite do
         allow(scenario_manager).to receive(:msys?).and_return(false)
         packager_lite.deploy
         expect(packager_lite).not_to have_received(:create_implib)
-        expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
+        expect(Tebako::Packager).to have_received(:init)
+          .with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin", preserve_bin: true)
         expect(Tebako::Packager).to have_received(:deploy)
-          .with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app", "/tmp/bundle-cache")
+          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache")
       end
     end
   end

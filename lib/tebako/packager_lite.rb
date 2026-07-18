@@ -28,10 +28,11 @@
 require "pathname"
 require "fileutils"
 
+require_relative "layered_package"
 require_relative "options_manager"
-require_relative "scenario_manager"
 require_relative "package_descriptor"
 require_relative "packager"
+require_relative "scenario_manager"
 
 module Tebako
   # Tebako application package descriptor
@@ -60,12 +61,29 @@ module Tebako
     def create_package
       deploy
       FileUtils.rm_f(name)
-      Tebako::Packager.mkdwarfs(@opts.deps_bin_dir, name, @opts.data_src_dir, codegen, @opts.compression_level)
+      layered? ? create_layered_package : create_monolithic_package
       puts "Created tebako #{@opts.output_type_second} at \"#{name}\""
     end
 
+    def create_monolithic_package
+      Tebako::Packager.mkdwarfs(@opts.deps_bin_dir, name, @opts.data_src_dir, codegen, @opts.compression_level,
+                                @opts.filesystem_cache_dir)
+    end
+
+    def create_layered_package
+      descriptor = codegen
+      layers = package_layers.map do |mount_point, source|
+        image = layer_image(mount_point)
+        Tebako::Packager.mkdwarfs(@opts.deps_bin_dir, image, source, nil, @opts.compression_level,
+                                  @opts.filesystem_cache_dir)
+        Tebako::LayeredPackage::Layer.new(mount_point: mount_point, path: image)
+      end
+      Tebako::LayeredPackage.write(name, descriptor: descriptor, layers: layers)
+    end
+
     def deploy
-      Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir)
+      Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir,
+                            preserve_bin: true)
       create_implib if @scm.msys?
       Tebako::Packager.deploy(@opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance, @opts.cwd,
                               @opts.bundle_cache_dir)
@@ -74,6 +92,30 @@ module Tebako
     def name
       bname = Pathname.new(@opts.package).cleanpath.to_s
       @name ||= "#{bname}.tebako"
+    end
+
+    private
+
+    # Layered application packages are emitted only alongside the matching
+    # runtime. Standalone application mode remains compatible with older
+    # runtimes, which expect one monolithic DwarFS image.
+    def layered?
+      @opts.mode == "both"
+    end
+
+    def package_layers
+      api_version = @opts.rv.api_version
+      {
+        "local" => File.join(@opts.data_src_dir, "local"),
+        "bin" => File.join(@opts.data_src_dir, "bin"),
+        "lib/ruby/gems/#{api_version}" => File.join(@opts.data_src_dir, "lib", "ruby", "gems", api_version)
+      }.select { |_mount_point, source| Dir.exist?(source) }
+    end
+
+    def layer_image(mount_point)
+      safe_name = mount_point.tr("/", "-")
+      FileUtils.mkdir_p(File.join(@opts.data_bin_dir, "layers"))
+      File.join(@opts.data_bin_dir, "layers", "#{safe_name}.dwarfs")
     end
   end
 end
