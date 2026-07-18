@@ -101,6 +101,8 @@ module Tebako
     method_option :cwd, type: :string, aliases: "-c", required: false, desc: CWD_DESCRIPTION
     method_option :"log-level", type: :string, aliases: "-l", required: false, enum: %w[error warn debug trace],
                                 desc: "Tebako memfs logging level, 'error' by default"
+    method_option :"compression-level", type: :numeric, required: false,
+                                        desc: "DwarFS compression level from 0 (fastest) to 9 (smallest), 5 by default"
     method_option :output, type: :string, aliases: "-o", required: false,
                            desc: "Tebako package file name, entry point base file name in the current folder by default"
     method_option :"entry-point", type: :string, aliases: ["-e", "--entry"], required: false,
@@ -203,7 +205,8 @@ module Tebako
 
     no_commands do
       def validate_press_options
-        return unless options["mode"] != "runtime"
+        validate_compression_level
+        return if options["mode"] == "runtime"
 
         opts = ""
         opts += " '--root'" if options["root"].nil?
@@ -212,6 +215,14 @@ module Tebako
           opts += " '--entry-point'"
         end
         raise Thor::Error, "No value provided for required options #{opts}" unless opts.empty?
+      end
+
+      def validate_compression_level
+        compression_level = options["compression-level"]
+        return if compression_level.nil?
+        return if compression_level.is_a?(Integer) && compression_level.between?(0, 9)
+
+        raise Thor::Error, "Compression level must be an integer from 0 to 9"
       end
 
       include Tebako::CliHelpers

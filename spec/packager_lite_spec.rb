@@ -35,7 +35,9 @@ RSpec.describe Tebako::PackagerLite do
     double("OptionsManager", stash_dir: "/tmp/stash", data_src_dir: "/tmp/src", data_pre_dir: "/tmp/pre",
                              data_bin_dir: "/tmp/bin", deps_bin_dir: "/tmp/deps_bin", mode: "both",
                              package: "test_package", rv: "3.2.11", ruby_ver: "3.2.11", root: "/", cwd: "/app",
-                             ruby_src_dir: "/tmp/ruby_src", output_type_second: "application package")
+                             ruby_src_dir: "/tmp/ruby_src", output_type_second: "application package",
+                             bundle_cache_dir: "/tmp/bundle-cache",
+                             compression_level: 5)
   end
   let(:scenario_manager) { double("ScenarioManager", fs_entrance: "/entry") }
 
@@ -79,7 +81,7 @@ RSpec.describe Tebako::PackagerLite do
       packager_lite.create_package
       expect(FileUtils).to have_received(:rm_f).with("test_package.tebako")
       expect(Tebako::Packager).to have_received(:mkdwarfs).with("/tmp/deps_bin", "test_package.tebako", "/tmp/src",
-                                                                "codegen_result")
+                                                                "codegen_result", 5)
     end
 
     it "prints the correct completion message" do
@@ -99,7 +101,8 @@ RSpec.describe Tebako::PackagerLite do
         packager_lite.deploy
         expect(packager_lite).to have_received(:create_implib)
         expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
-        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app")
+        expect(Tebako::Packager).to have_received(:deploy)
+          .with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app", "/tmp/bundle-cache")
       end
     end
 
@@ -112,7 +115,8 @@ RSpec.describe Tebako::PackagerLite do
         packager_lite.deploy
         expect(packager_lite).not_to have_received(:create_implib)
         expect(Tebako::Packager).to have_received(:init).with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin")
-        expect(Tebako::Packager).to have_received(:deploy).with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app")
+        expect(Tebako::Packager).to have_received(:deploy)
+          .with("/tmp/src", "/tmp/pre", "3.2.11", "/", "/entry", "/app", "/tmp/bundle-cache")
       end
     end
   end

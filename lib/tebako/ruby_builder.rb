@@ -63,7 +63,6 @@ module Tebako
     def target_build(output_type)
       puts "   ... building tebako #{output_type}"
       Dir.chdir(@src_dir) do
-        make_target("ruby") if @ruby_ver.ruby3x?
         make_target
       end
     end

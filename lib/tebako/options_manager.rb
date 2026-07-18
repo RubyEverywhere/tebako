@@ -40,6 +40,8 @@ require_relative "version"
 module Tebako
   # Cli helpers
   class OptionsManager # rubocop:disable Metrics/ClassLength
+    DEFAULT_COMPRESSION_LEVEL = 5
+
     def initialize(options)
       @options = options
       @rv = Tebako::RubyVersion.new(@options["Ruby"])
@@ -67,6 +69,14 @@ module Tebako
 
     def cwd_announce
       @cwd_announce ||= cwd.nil? ? "<Host current directory>" : cwd
+    end
+
+    def compression_level
+      @compression_level ||= @options.fetch("compression-level", DEFAULT_COMPRESSION_LEVEL)
+    end
+
+    def bundle_cache_dir
+      @bundle_cache_dir ||= File.join(deps, "bundle-cache")
     end
 
     # DATA_BIN_DIR folder is used to create packaged filesystem

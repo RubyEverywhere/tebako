@@ -116,6 +116,80 @@ RSpec.describe Tebako::DeployHelper do
     end
   end
 
+  describe "#bundle_install" do
+    before do
+      deploy_helper.instance_variable_set(:@bundler_command, "path/to/bundle")
+      deploy_helper.instance_variable_set(:@with_lockfile, true)
+      allow(deploy_helper).to receive(:bundler_reference)
+      allow(Tebako::BuildHelpers).to receive(:run_with_capture_v)
+    end
+
+    it "skips bundle install when bundle check succeeds" do
+      allow(deploy_helper).to receive(:bundle_check).and_return(true)
+      allow(deploy_helper).to receive(:puts)
+      expect(deploy_helper).not_to receive(:save_bundle_cache)
+      expect(Tebako::BuildHelpers).not_to receive(:run_with_capture_v)
+
+      deploy_helper.send(:bundle_install)
+    end
+
+    it "installs missing gems and refreshes the cache" do
+      allow(deploy_helper).to receive(:bundle_check).and_return(false)
+      allow(deploy_helper).to receive(:ncores).and_return(4)
+      expect(Tebako::BuildHelpers).to receive(:run_with_capture_v)
+        .with(["path/to/bundle", nil, "install", "--jobs=4"])
+      expect(deploy_helper).to receive(:save_bundle_cache)
+
+      deploy_helper.send(:bundle_install)
+    end
+
+    it "installs without checking or caching when no lockfile exists" do
+      deploy_helper.instance_variable_set(:@with_lockfile, false)
+      allow(deploy_helper).to receive(:ncores).and_return(4)
+      expect(deploy_helper).not_to receive(:bundle_check)
+      expect(deploy_helper).not_to receive(:save_bundle_cache)
+      expect(Tebako::BuildHelpers).to receive(:run_with_capture_v)
+        .with(["path/to/bundle", nil, "install", "--jobs=4"])
+
+      deploy_helper.send(:bundle_install)
+    end
+  end
+
+  describe "bundle cache storage" do
+    let(:cache_dir) { "/cache" }
+    let(:cache_path) { "/cache/key" }
+    let(:cached_deploy_helper) do
+      Tebako::DeployHelper.new(fs_root, fs_entrance, target_dir, pre_dir, cache_dir)
+    end
+
+    before do
+      cached_deploy_helper.instance_variable_set(:@tgd, "/target/gems")
+      allow(cached_deploy_helper).to receive(:bundle_cache_path).and_return(cache_path)
+    end
+
+    it "restores cached gems into the target gem directory" do
+      allow(Dir).to receive(:exist?).with(cache_path).and_return(true)
+      expect(FileUtils).to receive(:cp_r).with("/cache/key/.", "/target/gems")
+
+      cached_deploy_helper.send(:restore_bundle_cache)
+    end
+
+    it "does nothing when a cache entry does not exist" do
+      allow(Dir).to receive(:exist?).with(cache_path).and_return(false)
+      expect(FileUtils).not_to receive(:cp_r)
+
+      cached_deploy_helper.send(:restore_bundle_cache)
+    end
+
+    it "replaces the cache entry with the current gem directory" do
+      expect(FileUtils).to receive(:rm_rf).with(cache_path, secure: true)
+      expect(FileUtils).to receive(:mkdir_p).with(cache_path)
+      expect(FileUtils).to receive(:cp_r).with("/target/gems/.", cache_path)
+
+      cached_deploy_helper.send(:save_bundle_cache)
+    end
+  end
+
   describe "#configure" do
     let(:r_v) { "3.2.11" }
     let(:ruby_ver) { Tebako::RubyVersion.new(r_v) }

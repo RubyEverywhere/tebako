@@ -64,6 +64,7 @@ RSpec.describe Tebako::Packager do
     let(:fs_root) { "/path/to/fs_root" }
     let(:fs_entrance) { "/path/to/fs_entrance" }
     let(:cwd) { "/path/to/cwd" }
+    let(:bundle_cache_dir) { "/path/to/bundle-cache" }
     let(:deploy_helper) { instance_double(Tebako::DeployHelper) }
 
     before do
@@ -75,9 +76,9 @@ RSpec.describe Tebako::Packager do
 
     it "creates a new DeployHelper with the correct parameters" do
       expect(Tebako::DeployHelper).to receive(:new)
-        .with(fs_root, fs_entrance, target_dir, pre_dir)
+        .with(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir)
         .and_return(deploy_helper)
-      Tebako::Packager.deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd)
+      Tebako::Packager.deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd, bundle_cache_dir)
     end
 
     it "configures the DeployHelper with the correct parameters" do
@@ -177,16 +178,24 @@ RSpec.describe Tebako::Packager do
 
     context "when descriptor is not provided" do
       it "runs mkdwarfs with the correct parameters" do
-        params = [File.join(deps_bin_dir, "mkdwarfs"), "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
+        params = [File.join(deps_bin_dir, "mkdwarfs"), "-l", "5",
+                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
         expect(Tebako::BuildHelpers).to receive(:run_with_capture_v).with(params)
         described_class.mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir)
+      end
+
+      it "passes a custom compression level" do
+        params = [File.join(deps_bin_dir, "mkdwarfs"), "-l", "3",
+                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
+        expect(Tebako::BuildHelpers).to receive(:run_with_capture_v).with(params)
+        described_class.mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, nil, 3)
       end
     end
 
     context "when descriptor is provided" do
       it "runs mkdwarfs with the correct parameters including the descriptor" do
-        params = [File.join(deps_bin_dir, "mkdwarfs"), "-o", data_bin_file, "-i", data_src_dir, "--no-progress",
-                  "--header", descriptor]
+        params = [File.join(deps_bin_dir, "mkdwarfs"), "-l", "5",
+                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress", "--header", descriptor]
         expect(Tebako::BuildHelpers).to receive(:run_with_capture_v).with(params)
         described_class.mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor)
       end

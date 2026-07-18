@@ -46,7 +46,9 @@ RSpec.describe Tebako::Codegen do
       stash_dir: "/path/to/stash",
       package: "example_package",
       mode: "application",
-      deps: "/path/to/deps"
+      deps: "/path/to/deps",
+      bundle_cache_dir: "/path/to/deps/bundle-cache",
+      compression_level: 5
     )
   end
 
@@ -161,6 +163,7 @@ RSpec.describe Tebako::Codegen do
 
     before do
       allow(options_manager).to receive(:deps).and_return(deps)
+      allow(options_manager).to receive(:bundle_cache_dir).and_return("#{deps}/bundle-cache")
       allow(options_manager).to receive(:root).and_return(root)
       allow(options_manager).to receive(:deps_bin_dir).and_return(deps_bin_dir)
       allow(options_manager).to receive(:data_app_file).and_return(data_app_file)
@@ -170,6 +173,7 @@ RSpec.describe Tebako::Codegen do
       allow(options_manager).to receive(:data_stub_file).and_return(data_stub_file)
       allow(options_manager).to receive(:cwd).and_return(cwd)
       allow(options_manager).to receive(:ruby_ver).and_return(ruby_ver)
+      allow(options_manager).to receive(:compression_level).and_return(5)
 
       allow(scenario_manager).to receive(:fs_entrance).and_return(fs_entrance)
       allow(scenario_manager).to receive(:root).and_return(root)
@@ -182,9 +186,10 @@ RSpec.describe Tebako::Codegen do
         result = described_class.deploy_mk_bundle(options_manager, scenario_manager)
         expected = <<~SUBST
           Tebako::Packager.deploy("#{data_src_dir}", "#{data_pre_dir}",
-                                  rv , "#{root}", "#{fs_entrance}", "#{options_manager.cwd}")
+                                  rv , "#{root}", "#{fs_entrance}", "#{options_manager.cwd}",
+                                  "#{deps}/bundle-cache")
           Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_bundle_file}",
-                                    "#{data_src_dir}")
+                                    "#{data_src_dir}", nil, 5)
         SUBST
 
         expect(result).to eq(expected)
@@ -196,8 +201,10 @@ RSpec.describe Tebako::Codegen do
         result = described_class.deploy_mk_stub(options_manager)
         expected = <<~SUBST
           Tebako::Packager.deploy("#{data_src_dir}", "#{data_pre_dir}",
-                                  rv, "#{deps}/src/tebako/local", "stub.rb", nil)
-          Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_stub_file}", "#{data_src_dir}")
+                                  rv, "#{deps}/src/tebako/local", "stub.rb", nil,
+                                  "#{deps}/bundle-cache")
+          Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_stub_file}",
+                                    "#{data_src_dir}", nil, 5)
         SUBST
 
         expect(result).to eq(expected)

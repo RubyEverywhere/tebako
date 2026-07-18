@@ -55,15 +55,8 @@ RSpec.describe Tebako::RubyBuilder do
         builder.target_build(type)
       end
 
-      context "when ruby version is 3.x" do
-        it "runs make ruby with the correct number of cores" do
-          expect(Tebako::BuildHelpers).to receive(:run_with_capture).with(["make", "ruby", "-j#{ncores}"])
-          builder.target_build(type)
-        end
-      end
-
       it "runs make with the correct number of cores" do
-        expect(Tebako::BuildHelpers).to receive(:run_with_capture).with(["make", "-j#{ncores}"])
+        expect(Tebako::BuildHelpers).to receive(:run_with_capture).with(["make", "-j#{ncores}"]).once
         builder.target_build(type)
       end
     end

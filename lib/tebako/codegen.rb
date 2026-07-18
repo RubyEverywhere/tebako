@@ -73,17 +73,20 @@ module Tebako
       def deploy_mk_bundle(opt, scm)
         <<~SUBST
           Tebako::Packager.deploy("#{opt.data_src_dir}", "#{opt.data_pre_dir}",
-                                  rv , "#{opt.root}", "#{scm.fs_entrance}", "#{opt.cwd}")
+                                  rv , "#{opt.root}", "#{scm.fs_entrance}", "#{opt.cwd}",
+                                  "#{opt.bundle_cache_dir}")
           Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_bundle_file}",
-                                    "#{opt.data_src_dir}")
+                                    "#{opt.data_src_dir}", nil, #{opt.compression_level})
         SUBST
       end
 
       def deploy_mk_stub(opt)
         <<~SUBST
           Tebako::Packager.deploy("#{opt.data_src_dir}", "#{opt.data_pre_dir}",
-                                  rv, "#{File.join(opt.deps, "src", "tebako", "local")}", "stub.rb", nil)
-          Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_stub_file}", "#{opt.data_src_dir}")
+                                  rv, "#{File.join(opt.deps, "src", "tebako", "local")}", "stub.rb", nil,
+                                  "#{opt.bundle_cache_dir}")
+          Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_stub_file}",
+                                    "#{opt.data_src_dir}", nil, #{opt.compression_level})
         SUBST
       end
 

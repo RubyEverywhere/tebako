@@ -28,11 +28,13 @@
 # require "bundler"
 require "fileutils"
 require "find"
+require "digest"
 
 require_relative "error"
 require_relative "build_helpers"
 require_relative "packager/patch_helpers"
 require_relative "scenario_manager"
+require_relative "version"
 
 require_relative "packager/patch"
 require_relative "packager/rubygems_patch"
@@ -41,12 +43,15 @@ require_relative "packager/rubygems_patch"
 module Tebako
   # Tebako packaging support (deployer)
   class DeployHelper < ScenarioManagerWithBundler # rubocop:disable Metrics/ClassLength
-    def initialize(fs_root, fs_entrance, target_dir, pre_dir)
+    BUNDLE_CACHE_VERSION = 1
+
+    def initialize(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir = nil)
       super(fs_root, fs_entrance)
       @fs_root = fs_root
       @fs_entrance = fs_entrance
       @target_dir = target_dir
       @pre_dir = pre_dir
+      @bundle_cache_dir = bundle_cache_dir
       @verbose = %w[yes true].include?(ENV.fetch("VERBOSE", nil))
     end
 
@@ -67,6 +72,7 @@ module Tebako
 
     def deploy
       BuildHelpers.with_env(deploy_env) do
+        restore_bundle_cache
         update_rubygems
         system("#{@gem_command} env") if @verbose
         install_gem("tebako-runtime")
@@ -118,6 +124,71 @@ module Tebako
       BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "config", "set", "--local"] + opt)
     end
 
+    def bundle_check
+      BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "check"])
+      true
+    rescue Tebako::Error
+      false
+    end
+
+    def bundle_install
+      if @with_lockfile && bundle_check
+        puts "   ... bundle check found all locked gems; skipping bundle install"
+        return
+      end
+
+      BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "install", "--jobs=#{ncores}"])
+      save_bundle_cache if @with_lockfile
+    end
+
+    def bundle_cache_path
+      return if @bundle_cache_dir.nil? || !@with_lockfile
+
+      @bundle_cache_path ||= File.join(@bundle_cache_dir, bundle_cache_key)
+    end
+
+    def bundle_cache_key
+      inputs = bundle_cache_metadata
+      inputs.concat(%w[CC CXX CFLAGS CXXFLAGS LDFLAGS ARCHFLAGS].map { |name| ENV.fetch(name, nil) })
+      inputs.concat(bundle_cache_files.map { |path| File.binread(path) })
+      Digest::SHA256.hexdigest(inputs.join("\0"))
+    end
+
+    def bundle_cache_metadata
+      [
+        BUNDLE_CACHE_VERSION,
+        Tebako::VERSION,
+        Tebako::RUBYGEMS_VERSION,
+        @ruby_ver.ruby_version,
+        @bundler_version,
+        Gem::Platform.local.to_s,
+        @force_ruby_platform,
+        @nokogiri_option
+      ]
+    end
+
+    def bundle_cache_files
+      [@gemfile_path, @lockfile_path] + Dir.glob(File.join(@fs_root, "*.gemspec")).sort
+    end
+
+    def restore_bundle_cache
+      cache_path = bundle_cache_path
+      return unless cache_path && Dir.exist?(cache_path)
+
+      puts "   ... restoring bundled gems from #{cache_path}"
+      FileUtils.cp_r(File.join(cache_path, "."), @tgd)
+    end
+
+    def save_bundle_cache
+      cache_path = bundle_cache_path
+      return unless cache_path
+
+      puts "   ... saving bundled gems to #{cache_path}"
+      FileUtils.rm_rf(cache_path, secure: true)
+      FileUtils.mkdir_p(cache_path)
+      FileUtils.cp_r(File.join(@tgd, "."), cache_path)
+    end
+
     def check_entry_point(entry_point_root)
       fs_entry_point = File.join(entry_point_root, @fs_entrance)
       puts "   ... target entry point will be at #{File.join(@fs_mount_point, fs_entry_point)}"
@@ -161,7 +232,7 @@ module Tebako
       Dir.chdir(@pre_dir) do
         bundle_config
         puts "   *** It may take a long time for a big project. It takes REALLY long time on Windows ***"
-        BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "install", "--jobs=#{ncores}"])
+        bundle_install
         BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "exec", @gem_command, "build", gemspec])
         install_all_gems_or_fail
       end
@@ -221,7 +292,7 @@ module Tebako
       Dir.chdir(@tld) do
         bundle_config
         puts "   *** It may take a long time for a big project. It takes REALLY long time on Windows ***"
-        BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "install", "--jobs=#{ncores}"])
+        bundle_install
       end
 
       check_entry_point("local")

@@ -558,6 +558,23 @@ RSpec.describe Tebako::OptionsManager do
     end
   end
 
+  describe "#compression_level" do
+    it "defaults to level 5" do
+      expect(described_class.new({}).compression_level).to eq(5)
+    end
+
+    it "returns the configured compression level" do
+      expect(described_class.new({ "compression-level" => 3 }).compression_level).to eq(3)
+    end
+  end
+
+  describe "#bundle_cache_dir" do
+    it "stores cached gems under the Tebako dependencies directory" do
+      options_manager = described_class.new({ "prefix" => "/tmp/tebako" })
+      expect(options_manager.bundle_cache_dir).to eq("/tmp/tebako/deps/bundle-cache")
+    end
+  end
+
   describe "#process_gemfile" do
     let(:options) { { "Ruby" => "3.2.11" } }
     let(:options_manager) { described_class.new(options) }

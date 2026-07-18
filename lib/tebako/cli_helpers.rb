@@ -71,11 +71,13 @@ module Tebako
     WARN
 
     def check_warnings(options_manager)
-      return unless options_manager.mode != "runtime"
+      return if options_manager.mode == "runtime"
 
-      puts WARN if options_manager.package_within_root?
-      puts WARN2 if options_manager.prefix_within_root?
-      sleep 5
+      package_warning = options_manager.package_within_root?
+      prefix_warning = options_manager.prefix_within_root?
+      puts WARN if package_warning
+      puts WARN2 if prefix_warning
+      sleep 5 if package_warning || prefix_warning
     end
 
     def do_press(options_manager)

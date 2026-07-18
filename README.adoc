@@ -418,6 +418,7 @@ tebako press \
   [-R|--Ruby=<ruby-version>] \
   [-o|--output=<packaged-file-name>] \
   [-l|--log-level=<error|warn|debug|trace>] \
+  [--compression-level=<0..9>] \
   [-c|--cwd=<package-current-working-directory>] \
   [-D|--devmode] \
   [-P|--patchelf] \
@@ -469,6 +470,15 @@ and the application package is named according to the `-o` option with the `.teb
 `--log-level=<error|warn|debug|trace>`::
 (optional, defaults to `error`)
 logging level for the Tebako built-in memory filesystem driver.
+
+`--compression-level=<0..9>`::
+(optional, defaults to `5`)
+DwarFS compression level for the packaged filesystem. Level `0` prioritizes
+packaging speed, while level `9` prioritizes the smallest package size.
+
+When an application has a `Gemfile.lock`, Tebako caches its installed gems under
+the Tebako prefix. Later presses restore the matching Ruby/platform dependency
+set and use `bundle check`, running `bundle install` only when gems are missing.
 
 `--cwd=<package-current-working-directory>`::
 (optional)

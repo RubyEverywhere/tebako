@@ -80,10 +80,10 @@ module Tebako
       end
 
       # Deploy
-      def deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd) # rubocop:disable Metrics/ParameterLists
+      def deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd, bundle_cache_dir = nil) # rubocop:disable Metrics/ParameterLists
         puts "-- Running deploy script"
 
-        deploy_helper = Tebako::DeployHelper.new(fs_root, fs_entrance, target_dir, pre_dir)
+        deploy_helper = Tebako::DeployHelper.new(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir)
         deploy_helper.configure(ruby_ver, cwd)
         deploy_helper.deploy
         Tebako::Stripper.strip(deploy_helper, target_dir)
@@ -115,10 +115,12 @@ module Tebako
         FileUtils.cp_r "#{stash_dir}/.", src_dir
       end
 
-      def mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor = nil)
+      def mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor = nil,
+                   compression_level = 5)
         puts "-- Running mkdwarfs script"
         FileUtils.chmod("a+x", Dir.glob(File.join(deps_bin_dir, "mkdwarfs*")))
-        params = [File.join(deps_bin_dir, "mkdwarfs"), "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
+        params = [File.join(deps_bin_dir, "mkdwarfs"), "-l", compression_level.to_s,
+                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
         params << "--header" << descriptor if descriptor
         BuildHelpers.run_with_capture_v(params)
       end

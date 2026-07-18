@@ -78,6 +78,7 @@ RSpec.describe Tebako::CliHelpers do
         allow(self).to receive(:system).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_version_h).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp).and_return(true)
+        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         allow(Tebako::Packager).to receive(:finalize)
 
         expect { do_press(options_manager) }.not_to raise_error
@@ -86,6 +87,8 @@ RSpec.describe Tebako::CliHelpers do
       it "raises an error if the press command fails" do
         allow(FileUtils).to receive(:rm_rf)
         allow(self).to receive(:system).and_return(false)
+        allow(self).to receive(:generate_files)
+        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         expect { do_press(options_manager) }.to raise_error(Tebako::Error)
       end
     end
@@ -103,6 +106,7 @@ RSpec.describe Tebako::CliHelpers do
         allow(Tebako::Codegen).to receive(:generate_tebako_version_h).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_package_header).and_return(true)
+        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         allow(Tebako::Packager).to receive(:finalize)
 
         expect { do_press(options_manager) }.not_to raise_error
@@ -111,6 +115,8 @@ RSpec.describe Tebako::CliHelpers do
       it "raises an error if the press command fails" do
         allow(FileUtils).to receive(:rm_rf)
         allow(self).to receive(:system).and_return(false)
+        allow(self).to receive(:generate_files)
+        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         expect { do_press(options_manager) }.to raise_error(Tebako::Error)
       end
     end
@@ -129,6 +135,7 @@ RSpec.describe Tebako::CliHelpers do
         allow(Tebako::Codegen).to receive(:generate_tebako_version_h).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_package_header).and_return(true)
+        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         allow(Tebako::Packager).to receive(:finalize)
 
         allow(self).to receive(:sleep).with(any_args).and_return(nil)
@@ -146,7 +153,21 @@ RSpec.describe Tebako::CliHelpers do
       end
 
       it "does not display any warnings" do
+        expect(self).not_to receive(:sleep)
         expect { check_warnings(options_manager) }.not_to output.to_stdout
+      end
+    end
+
+    context "when no paths are within root" do
+      before do
+        options["mode"] = "bundle"
+        allow(options_manager).to receive(:package_within_root?).and_return(false)
+        allow(options_manager).to receive(:prefix_within_root?).and_return(false)
+      end
+
+      it "does not pause" do
+        expect(self).not_to receive(:sleep)
+        check_warnings(options_manager)
       end
     end
 
@@ -159,6 +180,7 @@ RSpec.describe Tebako::CliHelpers do
       end
 
       it "displays package warning" do
+        expect(self).to receive(:sleep).with(5)
         expect { check_warnings(options_manager) }.to output(Tebako::CliHelpers::WARN).to_stdout
       end
     end
@@ -172,6 +194,7 @@ RSpec.describe Tebako::CliHelpers do
       end
 
       it "displays prefix warning" do
+        expect(self).to receive(:sleep).with(5)
         expect { check_warnings(options_manager) }.to output(Tebako::CliHelpers::WARN2).to_stdout
       end
     end
@@ -185,6 +208,7 @@ RSpec.describe Tebako::CliHelpers do
       end
 
       it "displays both warnings" do
+        expect(self).to receive(:sleep).with(5).once
         expect do
           check_warnings(options_manager)
         end.to output(Tebako::CliHelpers::WARN + Tebako::CliHelpers::WARN2).to_stdout

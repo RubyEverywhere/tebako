@@ -60,14 +60,15 @@ module Tebako
     def create_package
       deploy
       FileUtils.rm_f(name)
-      Tebako::Packager.mkdwarfs(@opts.deps_bin_dir, name, @opts.data_src_dir, codegen)
+      Tebako::Packager.mkdwarfs(@opts.deps_bin_dir, name, @opts.data_src_dir, codegen, @opts.compression_level)
       puts "Created tebako #{@opts.output_type_second} at \"#{name}\""
     end
 
     def deploy
       Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir)
       create_implib if @scm.msys?
-      Tebako::Packager.deploy(@opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance, @opts.cwd)
+      Tebako::Packager.deploy(@opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance, @opts.cwd,
+                              @opts.bundle_cache_dir)
     end
 
     def name
