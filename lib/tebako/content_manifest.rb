@@ -44,6 +44,14 @@ module Tebako
         digest.hexdigest
       end
 
+      def stat_digest_tree(root, excluded: [])
+        root = File.expand_path(root)
+        exclusions = excluded.compact.map { |path| File.expand_path(path) }
+        digest = Digest::SHA256.new
+        digest_stat_directory(digest, root, "", exclusions)
+        digest.hexdigest
+      end
+
       def serialize(root:, metadata:, excluded: [])
         JSON.generate(
           "version" => VERSION,
@@ -67,6 +75,33 @@ module Tebako
           child = relative.empty? ? name : File.join(relative, name)
           digest_directory(digest, root, child, exclusions)
         end
+      end
+
+      def digest_stat_directory(digest, root, relative, exclusions)
+        absolute = relative.empty? ? root : File.join(root, relative)
+        return if excluded?(absolute, exclusions)
+
+        stat = File.lstat(absolute)
+        add_stat_entry(digest, relative, stat, absolute)
+        return unless stat.directory?
+
+        Dir.children(absolute).sort.each do |name|
+          child = relative.empty? ? name : File.join(relative, name)
+          digest_stat_directory(digest, root, child, exclusions)
+        end
+      end
+
+      def add_stat_entry(digest, relative, stat, absolute)
+        digest << [relative.b, stat.ftype, stat.mode.to_s].join("\0") << "\0"
+        add_stat_content(digest, stat, absolute)
+        digest << "\0"
+      end
+
+      def add_stat_content(digest, stat, absolute)
+        return digest << stat.size.to_s << "\0" << stat.mtime.to_r.to_s if stat.file?
+        return digest << File.readlink(absolute).b if stat.symlink?
+
+        digest
       end
 
       def add_entry(digest, relative, stat, absolute)

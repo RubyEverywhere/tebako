@@ -81,12 +81,29 @@ module Tebako
       end
 
       # Deploy
-      def deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd, bundle_cache_dir = nil) # rubocop:disable Metrics/ParameterLists
+      def deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd, # rubocop:disable Metrics/ParameterLists
+                 bundle_cache_dir = nil,
+                 native_gem_cache_dir = nil,
+                 install_runtime: true,
+                 tool_bin_dir: nil)
         puts "-- Running deploy script"
 
-        deploy_helper = Tebako::DeployHelper.new(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir)
+        arguments = [fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir, native_gem_cache_dir]
+        deploy_helper = if tool_bin_dir
+                          Tebako::DeployHelper.new(*arguments, tool_bin_dir: tool_bin_dir)
+                        else
+                          Tebako::DeployHelper.new(*arguments)
+                        end
         deploy_helper.configure(ruby_ver, cwd)
-        deploy_helper.deploy
+        install_runtime ? deploy_helper.deploy : deploy_helper.deploy(install_runtime: false)
+        Tebako::Stripper.strip(deploy_helper, target_dir)
+      end # rubocop:enable Metrics/ParameterLists
+
+      def deploy_runtime(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance)
+        puts "-- Preparing reusable runtime deployment"
+        deploy_helper = Tebako::DeployHelper.new(fs_root, fs_entrance, target_dir, pre_dir)
+        deploy_helper.configure(ruby_ver, nil)
+        deploy_helper.deploy_runtime
         Tebako::Stripper.strip(deploy_helper, target_dir)
       end
 
@@ -113,6 +130,12 @@ module Tebako
         PatchHelpers.recreate([src_dir, pre_dir])
         preserve_bin ? FileUtils.mkdir_p(bin_dir) : PatchHelpers.recreate(bin_dir)
         FileUtils.cp_r "#{stash_dir}/.", src_dir
+      end
+
+      def init_application(src_dir, pre_dir, bin_dir)
+        puts "-- Preparing application-only packaging environment"
+        PatchHelpers.recreate([src_dir, pre_dir])
+        FileUtils.mkdir_p(bin_dir)
       end
 
       def mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor = nil, # rubocop:disable Metrics/ParameterLists

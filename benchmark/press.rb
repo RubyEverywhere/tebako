@@ -25,7 +25,7 @@ class PressBenchmark
 
   def results_for(directory)
     root, output = prepare_workspace(directory)
-    results = { warm: press(root, output), unchanged: press(root, output) }
+    results = { mode: @options[:mode], warm: press(root, output), unchanged: press(root, output) }
     add_probe(root)
     results[:application_changed] = press(root, output)
     results[:runtime_validation] = validate(output) unless @options[:skip_run]
@@ -67,25 +67,37 @@ class PressBenchmark
   end
 
   def press_result(log, elapsed)
+    report = parse_report(log)
     {
       seconds: elapsed.round(3),
       reused_filesystems: log.scan("reusing packaged filesystem").length,
       reused_native_link: log.include?("reusing Ruby executable"),
-      rebuilt_runtime_filesystem: log.include?("Building packaged filesystem from changed inputs")
+      rebuilt_runtime_filesystem: log.include?("Building packaged filesystem from changed inputs"),
+      stages: report.fetch("events", []).map do |event|
+        event.slice("stage", "status", "duration_seconds", "reason", "details")
+      end
     }
+  end
+
+  def parse_report(log)
+    line = log.lines.reverse.find { |candidate| candidate.start_with?("{\"schema_version\"") }
+    line ? JSON.parse(line) : {}
+  rescue JSON::ParserError
+    {}
   end
 
   def press_command(root, output)
     [
       RbConfig.ruby, "-I#{File.join(@repo, "lib")}", File.join(@repo, "exe", "rbe-tebako"),
-      "press", "--mode", "both", "--prefix", @options[:prefix], "--Ruby", @options[:ruby],
+      "press", "--mode", @options[:mode], "--prefix", @options[:prefix], "--Ruby", @options[:ruby],
       "--root", root, "--entry-point", @options[:entry], "--output", output,
-      "--compression-level", @options[:compression].to_s
+      "--compression-level", @options[:compression].to_s, "--report", "json"
     ]
   end
 
   def validate(output)
-    log, status = Open3.capture2e(output, "--tebako-run", "#{output}.tebako")
+    command = @options[:mode] == "bundle" ? [output] : [output, "--tebako-run", "#{output}.tebako"]
+    log, status = Open3.capture2e(*command)
     { success: status.success?, output: log }
   end
 end
@@ -96,6 +108,7 @@ options = {
   prefix: "PWD",
   ruby: "4.0.6",
   compression: 5,
+  mode: "both",
   skip_run: false
 }
 
@@ -105,6 +118,9 @@ OptionParser.new do |parser|
   parser.on("--entry PATH", "Entry point relative to root (default: test.rb)") { |value| options[:entry] = value }
   parser.on("--prefix PATH", "Tebako prefix (default: PWD)") { |value| options[:prefix] = value }
   parser.on("--ruby VERSION", "Packaged Ruby version (default: 4.0.6)") { |value| options[:ruby] = value }
+  parser.on("--mode MODE", %w[bundle both], "Package mode: bundle or both (default: both)") do |value|
+    options[:mode] = value
+  end
   parser.on("--compression N", Integer, "DwarFS compression level (default: 5)") do |value|
     options[:compression] = value
   end

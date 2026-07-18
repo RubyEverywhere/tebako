@@ -28,15 +28,31 @@
 require "pathname"
 require "fileutils"
 
+require_relative "deployment_cache"
 require_relative "layered_package"
+require_relative "layer_planner"
 require_relative "options_manager"
 require_relative "package_descriptor"
 require_relative "packager"
 require_relative "scenario_manager"
 
+# rubocop:disable Metrics
 module Tebako
   # Tebako application package descriptor
   class PackagerLite
+    DEPLOYMENT_ENVIRONMENT = %w[
+      ARCHFLAGS
+      BUNDLE_DEPLOYMENT
+      BUNDLE_FORCE_RUBY_PLATFORM
+      BUNDLE_FROZEN
+      BUNDLE_WITH
+      BUNDLE_WITHOUT
+      CFLAGS
+      CPPFLAGS
+      CXXFLAGS
+      LDFLAGS
+    ].freeze
+
     def initialize(options_manager, scenario_manager)
       @opts = options_manager
       @scm = scenario_manager
@@ -45,7 +61,9 @@ module Tebako
 
     def codegen
       puts "-- Generating files"
-      Tebako::Codegen.generate_package_descriptor(@opts, @scm)
+      return Tebako::Codegen.generate_package_descriptor(@opts, @scm) unless layered?
+
+      Tebako::Codegen.generate_package_descriptor(@opts, @scm, mount_point: application_mount_point)
     end
 
     def create_implib
@@ -62,6 +80,11 @@ module Tebako
       deploy
       FileUtils.rm_f(name)
       layered? ? create_layered_package : create_monolithic_package
+      Tebako::BuildReporter.record(
+        stage: "application_package",
+        status: "rebuilt",
+        reason: "application package assembly completed"
+      )
       puts "Created tebako #{@opts.output_type_second} at \"#{name}\""
     end
 
@@ -82,11 +105,11 @@ module Tebako
     end
 
     def deploy
-      Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir,
-                            preserve_bin: true)
-      create_implib if @scm.msys?
-      Tebako::Packager.deploy(@opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance, @opts.cwd,
-                              @opts.bundle_cache_dir)
+      return deploy_uncached if !@opts.deployment_cache? || layered?
+
+      deployment_cache.fetch(@opts.data_src_dir) do
+        deploy_uncached
+      end
     end
 
     def name
@@ -96,6 +119,98 @@ module Tebako
 
     private
 
+    def deploy_uncached
+      if layered?
+        Tebako::Packager.init_application(@opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir)
+      elsif @opts.deployment_cache?
+        restore_runtime_deployment
+      else
+        Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir,
+                              preserve_bin: true)
+      end
+      create_implib if @scm.msys?
+      Tebako::Packager.deploy(@opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance, @opts.cwd,
+                              @opts.bundle_cache_dir, @opts.native_gem_cache_dir,
+                              install_runtime: !@opts.deployment_cache? && !layered?,
+                              tool_bin_dir: layered? ? File.join(@opts.stash_dir, "bin") : nil)
+      return if @opts.deployment_cache?
+
+      Tebako::BuildReporter.record(
+        stage: "deployment",
+        status: "rebuilt",
+        reason: "deployment caching was disabled"
+      )
+    end
+
+    def restore_runtime_deployment
+      runtime_deployment_cache.fetch(@opts.data_src_dir) do
+        Tebako::Packager.init(@opts.stash_dir, @opts.data_src_dir, @opts.data_pre_dir, @opts.data_bin_dir,
+                              preserve_bin: true)
+        Tebako::Packager.deploy_runtime(
+          @opts.data_src_dir, @opts.data_pre_dir, @opts.rv, @opts.root, @scm.fs_entrance
+        )
+      end
+    end
+
+    def runtime_deployment_cache
+      @runtime_deployment_cache ||= Tebako::DeploymentCache.new(
+        cache_dir: @opts.runtime_deployment_cache_dir,
+        project_root: @opts.stash_dir,
+        metadata: {
+          "ruby_version" => @opts.ruby_ver,
+          "ruby_api_version" => @opts.rv.api_version,
+          "platform" => RUBY_PLATFORM
+        },
+        stage: "runtime_deployment"
+      )
+    end
+
+    def deployment_cache
+      @deployment_cache ||= Tebako::DeploymentCache.new(
+        cache_dir: @opts.deployment_cache_dir,
+        project_root: @opts.root,
+        excluded: deployment_exclusions,
+        metadata: deployment_metadata,
+        paths: deployment_cache_paths
+      )
+    end
+
+    def deployment_cache_paths
+      return ["."] unless layered?
+
+      ["bin", "local", "lib/ruby/gems/#{@opts.rv.api_version}"]
+    end
+
+    def deployment_exclusions
+      [@opts.prefix, @opts.package, "#{@opts.package}.tebako"].select do |path|
+        @opts.folder_within_root?(path)
+      end
+    end
+
+    def deployment_metadata
+      {
+        "mode" => @opts.mode,
+        "ruby_version" => @opts.ruby_ver,
+        "ruby_api_version" => @opts.rv.api_version,
+        "rubygems_version" => Gem.rubygems_version.to_s,
+        "bundler_version" => @scm.bundler_version,
+        "scenario" => @scm.scenario,
+        "entry_point" => @scm.fs_entrance,
+        "cwd" => @opts.cwd,
+        "platform" => RUBY_PLATFORM,
+        "runtime_reference" => @scm.msys? ? runtime_reference : nil,
+        "environment" => deployment_environment
+      }
+    end
+
+    def deployment_environment
+      ENV.slice(*DEPLOYMENT_ENVIRONMENT)
+    end
+
+    def runtime_reference
+      @opts.mode == "application" ? @opts.ref : @opts.package
+    end
+
     # Layered application packages are emitted only alongside the matching
     # runtime. Standalone application mode remains compatible with older
     # runtimes, which expect one monolithic DwarFS image.
@@ -104,12 +219,17 @@ module Tebako
     end
 
     def package_layers
-      api_version = @opts.rv.api_version
-      {
-        "local" => File.join(@opts.data_src_dir, "local"),
-        "bin" => File.join(@opts.data_src_dir, "bin"),
-        "lib/ruby/gems/#{api_version}" => File.join(@opts.data_src_dir, "lib", "ruby", "gems", api_version)
-      }.select { |_mount_point, source| Dir.exist?(source) }
+      Tebako::LayerPlanner.new(
+        data_src_dir: @opts.data_src_dir,
+        ruby_api_version: @opts.rv.api_version,
+        workspace: @opts.layer_plan_dir,
+        strategy: @opts.layer_strategy,
+        single_mount: true
+      ).plan.to_h { |layer| [layer.mount_point, layer.source] }
+    end
+
+    def application_mount_point
+      File.join(@scm.fs_mount_point, "application")
     end
 
     def layer_image(mount_point)
@@ -119,3 +239,4 @@ module Tebako
     end
   end
 end
+# rubocop:enable Metrics

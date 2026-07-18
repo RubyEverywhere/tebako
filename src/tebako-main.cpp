@@ -43,10 +43,19 @@
 #include <vector>
 #include <stdexcept>
 #include <tuple>
+#include <fstream>
+#include <openssl/sha.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#endif
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+#include <mach-o/ldsyms.h>
+#include <mach-o/loader.h>
 #endif
 
 #include <tebako/tebako-config.h>
@@ -56,16 +65,14 @@
 #include <tebako/tebako-main.h>
 #include <tebako/tebako-fs.h>
 #include <tebako/tebako-cmdline.h>
+#include <tebako/layered-format.h>
+#include <tebako/single-file-bundle-format.h>
 
 static int running_miniruby = 0;
 static tebako::cmdline_args* args = nullptr;
 static std::vector<char> package;
 
 namespace {
-constexpr char layer_magic[] = "TEBAKOL1";
-constexpr size_t layer_magic_size = sizeof(layer_magic) - 1;
-constexpr size_t layer_footer_size = sizeof(uint64_t) + layer_magic_size;
-
 struct package_layer {
   std::string mount_point;
   size_t offset;
@@ -104,14 +111,121 @@ bool valid_layer_mount_point(const std::string& mount_point)
   return true;
 }
 
-std::optional<std::vector<package_layer>> parse_package_layers(const std::vector<char>& buffer)
+std::string executable_path(const char* argv0)
 {
-  if (buffer.size() < layer_footer_size ||
-      memcmp(buffer.data() + buffer.size() - layer_magic_size, layer_magic, layer_magic_size) != 0) {
+#ifdef _WIN32
+  std::vector<char> path(MAX_PATH);
+  DWORD length = GetModuleFileNameA(nullptr, path.data(), static_cast<DWORD>(path.size()));
+  if (length > 0 && length < path.size()) {
+    return std::string(path.data(), length);
+  }
+#elif defined(__APPLE__)
+  uint32_t size = 0;
+  _NSGetExecutablePath(nullptr, &size);
+  std::vector<char> path(size);
+  if (_NSGetExecutablePath(path.data(), &size) == 0) {
+    return std::string(path.data());
+  }
+#elif defined(__linux__)
+  std::vector<char> path(4096);
+  ssize_t length = readlink("/proc/self/exe", path.data(), path.size() - 1);
+  if (length > 0) {
+    return std::string(path.data(), static_cast<size_t>(length));
+  }
+#endif
+  return argv0;
+}
+
+std::optional<std::vector<char>> decode_bundle_envelope(const std::vector<char>& container, bool require_runtime)
+{
+  if (container.size() < tebako::single_file_bundle_format::footer_size) {
     return std::nullopt;
   }
 
-  size_t footer_offset = buffer.size() - layer_footer_size;
+  size_t footer_offset = container.size() - tebako::single_file_bundle_format::footer_size;
+  size_t magic_offset = container.size() - tebako::single_file_bundle_format::magic_size;
+  if (memcmp(container.data() + magic_offset, tebako::single_file_bundle_format::magic,
+             tebako::single_file_bundle_format::magic_size) != 0) {
+    return std::nullopt;
+  }
+
+  size_t cursor = footer_offset;
+  uint64_t application_size = read_little_endian(container, cursor, sizeof(uint64_t), container.size());
+  if (application_size == 0 || application_size > footer_offset) {
+    throw std::invalid_argument("Invalid single-file bundle application size");
+  }
+  size_t application_offset = footer_offset - static_cast<size_t>(application_size);
+  if (require_runtime && application_offset == 0) {
+    throw std::invalid_argument("Invalid single-file bundle runtime size");
+  }
+
+  unsigned char digest[SHA256_DIGEST_LENGTH];
+  SHA256(reinterpret_cast<const unsigned char*>(container.data() + application_offset),
+         static_cast<size_t>(application_size), digest);
+  if (memcmp(digest, container.data() + cursor, tebako::single_file_bundle_format::digest_size) != 0) {
+    throw std::invalid_argument("Invalid single-file bundle application checksum");
+  }
+  return std::vector<char>(container.begin() + application_offset, container.begin() + footer_offset);
+}
+
+#ifdef __APPLE__
+std::optional<std::vector<char>> macho_bundle_application()
+{
+  unsigned long section_size = 0;
+  const uint8_t* section = getsectiondata(&_mh_execute_header, "__TEBAKO", "__app", &section_size);
+  if (section == nullptr) {
+    return std::nullopt;
+  }
+
+  std::vector<char> envelope(reinterpret_cast<const char*>(section),
+                             reinterpret_cast<const char*>(section) + section_size);
+  auto application = decode_bundle_envelope(envelope, false);
+  if (!application.has_value()) {
+    throw std::invalid_argument("Invalid Mach-O Tebako application section");
+  }
+  return application;
+}
+#endif
+
+std::optional<std::vector<char>> appended_bundle_application(const char* argv0)
+{
+  std::ifstream file(executable_path(argv0), std::ios::binary | std::ios::ate);
+  if (!file) {
+    return std::nullopt;
+  }
+  std::streamsize file_size = file.tellg();
+  if (file_size < static_cast<std::streamsize>(tebako::single_file_bundle_format::footer_size)) {
+    return std::nullopt;
+  }
+  file.seekg(0, std::ios::beg);
+  std::vector<char> executable(static_cast<size_t>(file_size));
+  if (!file.read(executable.data(), file_size)) {
+    throw std::invalid_argument("Failed to inspect the Tebako executable");
+  }
+
+  return decode_bundle_envelope(executable, true);
+}
+
+std::optional<std::vector<char>> single_file_bundle_application(const char* argv0)
+{
+#ifdef __APPLE__
+  auto macho_application = macho_bundle_application();
+  if (macho_application.has_value()) {
+    return macho_application;
+  }
+#endif
+  return appended_bundle_application(argv0);
+}
+
+std::optional<std::vector<package_layer>> parse_package_layers(const std::vector<char>& buffer)
+{
+  if (buffer.size() < tebako::layered_format::footer_size ||
+      memcmp(buffer.data() + buffer.size() - tebako::layered_format::magic_size,
+             tebako::layered_format::magic, tebako::layered_format::magic_size) != 0) {
+    return std::nullopt;
+  }
+
+  size_t footer_offset = buffer.size() - tebako::layered_format::footer_size;
   size_t size_offset = footer_offset;
   uint64_t manifest_size_u64 = read_little_endian(buffer, size_offset, sizeof(uint64_t), buffer.size());
   if (manifest_size_u64 > footer_offset) {
@@ -179,6 +293,21 @@ void mount_package_layer(const package_layer& layer, const std::string& mount_po
     throw std::invalid_argument("Failed to mount package layer at " + layer.mount_point);
   }
 }
+
+void configure_application_gem_path(const tebako::package_descriptor& descriptor)
+{
+  std::string ruby_api_version = std::to_string(descriptor.get_ruby_version_major()) + "." +
+                                 std::to_string(descriptor.get_ruby_version_minor()) + ".0";
+  std::string application_gems = descriptor.get_mount_point() + "/lib/ruby/gems/" + ruby_api_version;
+  std::string runtime_gems = std::string(tebako::fs_mount_point) + "/lib/ruby/gems/" + ruby_api_version;
+#ifdef _WIN32
+  std::string gem_path = application_gems + ";" + runtime_gems;
+  _putenv_s("GEM_PATH", gem_path.c_str());
+#else
+  std::string gem_path = application_gems + ":" + runtime_gems;
+  setenv("GEM_PATH", gem_path.c_str(), 1);
+#endif
+}
 }  // namespace
 
 static void tebako_clean(void)
@@ -216,19 +345,30 @@ extern "C" int tebako_main(int* argc, char*** argv)
       args = new tebako::cmdline_args(*argc, (const char**)*argv);
       args->parse_arguments();
       std::optional<std::vector<package_layer>> layers;
+      std::optional<tebako::package_descriptor> descriptor;
       if (args->with_application()) {
         args->process_package();
-        auto descriptor = args->get_descriptor();
+        descriptor = args->get_descriptor();
         package = std::move(args->get_package());
-        if (descriptor.has_value()) {
-          mount_point = descriptor->get_mount_point().c_str();
-          entry_point = descriptor->get_entry_point().c_str();
-          cwd = descriptor->get_cwd();
-          layers = parse_package_layers(package);
-          if (!layers.has_value()) {
-            data = package.data();
-            size = package.size();
-          }
+      }
+      else {
+        auto embedded_application = single_file_bundle_application((*argv)[0]);
+        if (embedded_application.has_value()) {
+          package = std::move(*embedded_application);
+          descriptor.emplace(package);
+        }
+      }
+      if (descriptor.has_value()) {
+        mount_point = descriptor->get_mount_point().c_str();
+        entry_point = descriptor->get_entry_point().c_str();
+        cwd = descriptor->get_cwd();
+        layers = parse_package_layers(package);
+        if (!layers.has_value()) {
+          data = package.data();
+          size = package.size();
+        }
+        else {
+          configure_application_gem_path(*descriptor);
         }
       }
 

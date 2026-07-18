@@ -47,6 +47,8 @@ module Tebako
     117 => "Failed to load Gemfile.lock",
     118 => "Bundler version in Gemfile.lock does satisfy minimal Tebako version requirememnts",
     119 => "Failed to find compatible bundler version",
+    120 => "Runtime descriptor is invalid or incompatible",
+    121 => "Runtime SDK is invalid or incompatible",
     201 => "Warning. Could not create cache version file"
   }.freeze
 

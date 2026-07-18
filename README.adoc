@@ -294,7 +294,7 @@ single, performant, executable binary.
 - Packages all files and dependencies into a single binary
 - Supports multiple operating systems and architectures
 - Provides efficient packaging and execution with DwarFS
-- Offers security features like signing on macOS
+- Supports macOS signing with the legacy embedded bundle format
 - Simplifies distribution and deployment
 - Native running speed
 |
@@ -403,8 +403,9 @@ the packaging environment and collects the required dependencies. Subsequent
 invocations are much faster.
 ====
 
-Upon the next invocation, Tebako will use previously created packaging
-environment. The press process itself takes minutes.
+Upon the next invocation, Tebako reuses its packaging environment and
+content-addressed artifacts. An unchanged bundle normally returns after
+verification, and an application-only edit reuses the finalized Ruby runtime.
 
 You can manage setup of packaging environment manually; please refer to
 description of setup and clean commands below.
@@ -419,6 +420,11 @@ tebako press \
   [-o|--output=<packaged-file-name>] \
   [-l|--log-level=<error|warn|debug|trace>] \
   [--compression-level=<0..9>] \
+  [--[no-]deployment-cache] \
+  [--explain] \
+  [--report=json] \
+  [--layer-strategy=<coarse|semantic>] \
+  [--bundle-format=<layered|legacy>] \
   [-c|--cwd=<package-current-working-directory>] \
   [-D|--devmode] \
   [-P|--patchelf] \
@@ -476,9 +482,74 @@ logging level for the Tebako built-in memory filesystem driver.
 DwarFS compression level for the packaged filesystem. Level `0` prioritizes
 packaging speed, while level `9` prioritizes the smallest package size.
 
-When an application has a `Gemfile.lock`, Tebako caches its installed gems under
-the Tebako prefix. Later presses restore the matching Ruby/platform dependency
-set and use `bundle check`, running `bundle install` only when gems are missing.
+When an application has a `Gemfile`, Tebako caches its installed gems under the
+Tebako prefix. Later presses restore the matching dependency set and use
+`bundle check`, running `bundle install` only when gems are missing. The cache
+key includes the lockfile when one exists, plus the Gemfile, gemspec, Ruby ABI,
+platform, Bundler configuration, and native build inputs.
+
+`--deployment-cache`::
+(optional, enabled by default)
+Restores a verified, content-addressed deployment tree when the application,
+lockfile, Ruby ABI, platform, and packaging inputs are unchanged. Use
+`--no-deployment-cache` to force deployment work.
+
+`--explain`::
+(optional)
+Prints why each fast-build stage was rebuilt or reused.
+
+`--report=json`::
+(optional)
+Emits the same build decisions as structured JSON for benchmarks and CI.
+
+`--layer-strategy=<coarse|semantic>`::
+(optional, defaults to `coarse`)
+Controls application-layer planning where the selected runtime supports
+multiple secondary filesystems. The current default runtime uses one
+application capsule because its filesystem wrapper supports one secondary
+mount. The planner remains available for runtimes that advertise wider mount
+support.
+
+`--bundle-format=<layered|legacy>`::
+(optional, defaults to `layered`)
+Selects the internal representation of a one-file `bundle`.
++
+`layered` reuses a verified finalized Ruby runtime and combines it with one
+checksummed, compressed application capsule. Linux and Windows store the
+capsule in a versioned trailer. macOS performs a targeted final link that
+places the capsule in the `__TEBAKO,__app` Mach-O section, allowing the complete
+executable to be signed. Application edits never recompile the Ruby runtime.
+The deployed result is still exactly one executable and does not need Ruby on
+the destination machine.
++
+`legacy` embeds the complete filesystem during the native link. It is slower
+for application edits but remains available for compatibility.
++
+Layered macOS bundles support normal `codesign` replacement and strict
+verification. Sign with Hardened Runtime and Tebako's supplied entitlements:
++
+[source,shell]
+----
+codesign --force --timestamp --options runtime \
+  --entitlements docs/macos-entitlements.plist \
+  --sign "Developer ID Application: YOUR NAME (TEAMID)" \
+  ./my-tebako-app
+
+codesign --verify --deep --strict --verbose=4 ./my-tebako-app
+----
++
+Ruby's YJIT allocates executable memory without `MAP_JIT`, which requires
+`com.apple.security.cs.allow-unsigned-executable-memory` under Hardened Runtime.
+Packaged native gems are extracted as independently ad-hoc-signed `.bundle`
+files, which requires `com.apple.security.cs.disable-library-validation`.
+The supplied link:docs/macos-entitlements.plist[macOS entitlements file]
+contains those two runtime exceptions.
++
+Release CI should then submit a ZIP, DMG, or package containing the signed
+executable to `notarytool`, staple the accepted artifact where that container
+supports stapling, and execute the distributed result. Developer ID signing and
+the Apple notary service require project credentials and therefore remain
+release-CI checks.
 
 `--cwd=<package-current-working-directory>`::
 (optional)
@@ -563,12 +634,15 @@ package metadata; timestamps alone do not invalidate an image. Generated files
 are updated only when their contents change, and CMake rebuilds or relinks the
 runtime only when the packaged filesystem or native inputs change.
 
-In `both` mode, the application package is split into immutable application,
-executable, and gem filesystem layers. An application-only edit recompresses the
-application layer while reusing unchanged gem and executable layers. The
-matching runtime mounts those layers at startup. `application` mode continues
-to emit a monolithic image so it remains compatible with previously built
-runtime executables.
+In the default `bundle` path, Tebako reuses an immutable finalized runtime and
+compresses the deployed app, executables, gems, and package metadata into one
+application capsule. The capsule is appended with a versioned, checksummed
+footer, producing exactly one executable. An application-only edit therefore
+does not rebuild the runtime filesystem or relink Ruby.
++
+`both` mode uses the same capsule representation for its separate application
+package. `application` mode continues to emit a monolithic image so it remains
+compatible with previously built runtime executables.
 
 The installed DwarFS writer does not expose a persistent compressed-chunk cache.
 Layer-sized, content-addressed images therefore provide incremental compression
@@ -582,12 +656,51 @@ run:
 ruby benchmark/press.rb \
   --root tests/test-00 \
   --entry test.rb \
-  --prefix PWD
+  --prefix PWD \
+  --mode bundle
 ----
 
 The command emits JSON timings, cache-hit counts, native-link reuse, and a
-runtime validation result. Keep the Ruby version, compression level, prefix,
-machine load, and application fixed when comparing revisions.
+runtime validation result. Use `--mode bundle` to measure the primary
+single-executable workflow or `--mode both` to measure split runtime/application
+packaging. Keep the mode, Ruby version, compression level, prefix, machine load,
+and application fixed when comparing revisions.
+
+===== Explicit fast-build commands
+
+The runtime and application phases can be invoked independently so application
+edits never enter the runtime build:
+
+[source,sh]
+----
+tebako runtime build \
+  --Ruby=4.0.6 \
+  --output=build/tebako-runtime \
+  --sdk-output=build/tebako-runtime-sdk.tar.gz
+
+tebako runtime install build/tebako-runtime-sdk.tar.gz \
+  --destination=$HOME/.tebako/runtime-sdk
+
+tebako application build \
+  --runtime=build/tebako-runtime \
+  --root=. \
+  --entry-point=bin/my-app \
+  --output=build/my-app \
+  --explain
+----
+
+SDK installation verifies the archive manifest and file checksums before
+atomically replacing an existing installation. Tebako also exposes cache and
+package diagnostics:
+
+[source,sh]
+----
+tebako cache stats
+tebako cache verify
+tebako cache prune --max-size=20GB
+tebako package inspect build/my-app.tebako
+tebako package verify build/my-app.tebako
+----
 
 ==== Setup
 

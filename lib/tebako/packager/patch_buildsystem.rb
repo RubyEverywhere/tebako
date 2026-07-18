@@ -41,6 +41,22 @@ module Tebako
           "ext/extinit.c: $(srcdir)/template/extinit.c.tmpl $(PREP) $(EXTS_MK)"
       }.freeze
 
+      EXTS_MK_PATTERN =
+        "extso:\n" \
+        "\t@echo EXTSO=$(EXTSO)"
+
+      EXTS_MK_PATCH =
+        "tebako-bundle:\n" \
+        "\t$(Q)$(MAKE)<%=mflags%> $(SUBMAKEOPTS) \\\n" \
+        "\t\tTEBAKO_BUNDLE_OUTPUT=\"$(TEBAKO_BUNDLE_OUTPUT)\" \\\n" \
+        "\t\tTEBAKO_APPLICATION_LDFLAGS=\"$(TEBAKO_APPLICATION_LDFLAGS)\" \\\n" \
+        "\t\t$(TEBAKO_BUNDLE_OUTPUT)\n\n" \
+        "#{EXTS_MK_PATTERN}"
+
+      EXTS_MK_TEMPLATE_PATCH = {
+        EXTS_MK_PATTERN => EXTS_MK_PATCH
+      }.freeze
+
       # This patch changes libraries that are used for Ruby linking
       # MAINLIBS is patched elsewhere (not with literal but dynamically)
       #          to haold the list of sattic libraries and related options
@@ -54,7 +70,7 @@ module Tebako
       TEMPLATE_MAKEFILE_IN_BASE_PATCH_PRE_3_1 =
         "# -- Start of tebako patch --\n" \
         "\t\t$(Q) $(PURIFY) $(CC) $(LDFLAGS) $(MAINOBJ) " \
-        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(OUTFLAG)$@\n" \
+        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(TEBAKO_APPLICATION_LDFLAGS) $(OUTFLAG)$@\n" \
         "# -- End of tebako patch --"
 
       TEMPLATE_MAKEFILE_IN_BASE_PATTERN_PRE_3_3 =
@@ -68,13 +84,28 @@ module Tebako
       TEMPLATE_MAKEFILE_IN_BASE_PATCH =
         "# -- Start of tebako patch --\n" \
         "\t\t$(Q) $(PURIFY) $(CC) $(EXE_LDFLAGS) $(MAINOBJ) " \
-        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(OUTFLAG)$@\n" \
+        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(TEBAKO_APPLICATION_LDFLAGS) $(OUTFLAG)$@\n" \
         "# -- End of tebako patch --"
+
+      POSTLINK_PATTERN =
+        "\t\t$(Q) $(POSTLINK)\n\n" \
+        "$(PROGRAM): @XRUBY_LIBPATHENV_WRAPPER@"
+
+      POSTLINK_PATCH =
+        "\t\t$(Q) $(POSTLINK)\n\n" \
+        "ifneq ($(TEBAKO_BUNDLE_OUTPUT),)\n" \
+        "$(TEBAKO_BUNDLE_OUTPUT):\n" \
+        "\t\t@$(RM) $@\n" \
+        "\t\t$(ECHO) linking $@\n" \
+        "\t\t$(Q) $(PURIFY) $(CC) $(EXE_LDFLAGS) $(MAINOBJ) $(EXTOBJS) " \
+        "$(LIBRUBYARG_STATIC) $(TEBAKO_APPLICATION_LDFLAGS) $(OUTFLAG)$@\n" \
+        "endif\n\n" \
+        "$(PROGRAM): @XRUBY_LIBPATHENV_WRAPPER@"
 
       TEMPLATE_MAKEFILE_IN_BASE_PATCH_MSYS =
         "# -- Start of tebako patch --\n" \
         "\t\t$(Q) $(PURIFY) $(CC) $(EXE_LDFLAGS) $(RUBY_EXP) $(MAINOBJ) " \
-        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(OUTFLAG)$@\n" \
+        "$(EXTOBJS) $(LIBRUBYARG_STATIC) $(TEBAKO_APPLICATION_LDFLAGS) $(OUTFLAG)$@\n" \
         "# -- End of tebako patch --"
 
       def template_makefile_in_subst(ruby_ver)

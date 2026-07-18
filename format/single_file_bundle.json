@@ -1,0 +1,12 @@
+{
+  "name": "Tebako single-file layered bundle",
+  "major_version": 1,
+  "minor_version": 0,
+  "magic": "TEBAKOB1",
+  "endianness": "little",
+  "footer": [
+    ["application_size", "uint64"],
+    ["application_sha256", "bytes[32]"],
+    ["magic", "bytes[8]"]
+  ]
+}

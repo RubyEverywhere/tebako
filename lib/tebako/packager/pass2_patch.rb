@@ -100,7 +100,7 @@ module Tebako
       end
 
       def patch_map_base
-        {
+        patch = {
           "template/Makefile.in" => template_makefile_in_patch,
           "tool/mkconfig.rb" => tool_mkconfig_rb_patch,
           "dir.c" => dir_c_patch, "dln.c" => dln_c_patch,
@@ -108,6 +108,8 @@ module Tebako
           "file.c" => PatchHelpers.patch_c_file_pre("/* define system APIs */"),
           "util.c" => util_c_patch
         }
+        patch["template/exts.mk.tmpl"] = EXTS_MK_TEMPLATE_PATCH if @scmb.macos?
+        patch
       end
 
       def mlibs_subst
@@ -121,7 +123,9 @@ module Tebako
       end
 
       def template_makefile_in_patch
-        template_makefile_in_patch_two(@ruby_ver).merge(mlibs_subst)
+        patch = template_makefile_in_patch_two(@ruby_ver).merge(mlibs_subst)
+        patch.merge!(POSTLINK_PATTERN => POSTLINK_PATCH) if @scmb.macos?
+        patch
       end
     end
 

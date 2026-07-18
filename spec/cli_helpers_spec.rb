@@ -35,7 +35,7 @@ RSpec.describe Tebako::CliHelpers do
 
   let(:options) do
     { "output" => "/path/to/output", "deps" => "/path/to/deps", "entry-point" => "entrypoint",
-      "root" => "/tmp/path/to/root/" }
+      "root" => "/tmp/path/to/root/", "deployment-cache" => false }
   end
   let(:ruby_ver) { "3.2.11" }
   let(:ruby_hash) { Tebako::RubyVersion::RUBY_VERSIONS["3.2.11"] }
@@ -68,35 +68,30 @@ RSpec.describe Tebako::CliHelpers do
     end
 
     context "when mode is set to 'bundle'" do
+      let(:bundle_builder) { instance_double(Tebako::SingleFileBundleBuilder) }
+
       before do
         options["mode"] = "bundle"
+        allow(Tebako::SingleFileBundleBuilder).to receive(:new).and_return(bundle_builder)
       end
 
       let(:options_manager) { Tebako::OptionsManager.new(options) }
 
       it "executes the press command successfully" do
-        allow(FileUtils).to receive(:rm_rf)
-        allow(self).to receive(:system).and_return(true)
-        allow(Tebako::Codegen).to receive(:generate_tebako_version_h).and_return(true)
-        allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp).and_return(true)
-        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
-        allow(Tebako::Packager).to receive(:finalize)
+        allow(bundle_builder).to receive(:build).and_return(true)
 
         expect { do_press(options_manager) }.not_to raise_error
       end
 
       it "raises an error if the press command fails" do
-        allow(FileUtils).to receive(:rm_rf)
-        allow(self).to receive(:system).and_return(false)
-        allow(self).to receive(:generate_files)
-        allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
+        allow(bundle_builder).to receive(:build).and_raise(Tebako::Error.new("bundle failed", 104))
         expect { do_press(options_manager) }.to raise_error(Tebako::Error)
       end
     end
 
     context "when mode is set to 'runtime'" do
       before do
-        options["mode"] = "bundle"
+        options["mode"] = "runtime"
       end
 
       let(:options_manager) { Tebako::OptionsManager.new(options) }
@@ -106,6 +101,7 @@ RSpec.describe Tebako::CliHelpers do
         allow(self).to receive(:system).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_version_h).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp).and_return(true)
+        allow(Tebako::Codegen).to receive(:generate_stub_rb).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_package_header).and_return(true)
         allow(Tebako::Codegen).to receive(:generate_deploy_rb).and_return(true)
         allow(Tebako::Packager).to receive(:finalize)
@@ -123,9 +119,12 @@ RSpec.describe Tebako::CliHelpers do
     end
 
     context "when package_within_root? is true" do
+      let(:bundle_builder) { instance_double(Tebako::SingleFileBundleBuilder, build: true) }
+
       before do
         options["mode"] = "bundle"
         options["output"] = "/tmp/path/to/root/output"
+        allow(Tebako::SingleFileBundleBuilder).to receive(:new).and_return(bundle_builder)
       end
 
       let(:options_manager) { Tebako::OptionsManager.new(options) }

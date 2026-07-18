@@ -35,6 +35,8 @@ require "thor"
 require "yaml"
 
 require_relative "cache_manager"
+require_relative "build_reporter"
+require_relative "build_commands"
 require_relative "cli_helpers"
 require_relative "error"
 require_relative "ruby_version"
@@ -54,6 +56,16 @@ module Tebako
                            desc: "Developer mode, please do not use if unsure"
     class_option :tebafile, type: :string, aliases: "-t", required: false,
                             desc: "tebako configuration file 'tebafile', '$PWD/.tebako.yml' by default"
+    desc "runtime SUBCOMMAND", "Build and manage reusable runtimes"
+    subcommand "runtime", Tebako::RuntimeCommand
+    desc "application SUBCOMMAND", "Build applications against reusable runtimes"
+    subcommand "application", Tebako::ApplicationCommand
+    desc "cache SUBCOMMAND", "Inspect, verify, prune, or clean fast-build caches"
+    subcommand "cache", Tebako::CacheCommand
+    desc "package SUBCOMMAND", "Inspect or verify Tebako application packages"
+    subcommand "package", Tebako::PackageCommand
+    desc "update SUBCOMMAND", "Prepare, atomically apply, or roll back application releases"
+    subcommand "update", Tebako::UpdateCommand
     desc "clean", "Clean tebako packaging environment"
     def clean
       (om, cm) = bootstrap(clean: true)
@@ -115,17 +127,33 @@ module Tebako
     method_option :mode, type: :string, aliases: "-m", required: false, enum: %w[bundle both runtime application],
                          desc: "Tebako press mode, 'bundle' by default"
     method_option :ref, type: :string, aliases: "-u", required: false, desc: REF_DESCRIPTION
+    method_option :explain, type: :boolean, required: false,
+                            desc: "Explain which build stages were rebuilt or reused"
+    method_option :report, type: :string, required: false, enum: %w[json],
+                           desc: "Emit a machine-readable build report"
+    method_option :"deployment-cache", type: :boolean, default: true,
+                                       desc: "Reuse content-identical deployed application trees"
+    method_option :"layer-strategy", type: :string, enum: %w[coarse semantic], default: "coarse",
+                                     desc: "Application layer planning strategy"
+    method_option :"bundle-format", type: :string, enum: %w[layered legacy], default: "layered",
+                                    desc: "Single-file bundle storage format"
 
-    def press
+    def press # rubocop:disable Metrics/MethodLength
       validate_press_options
       (om, cm) = bootstrap
+      reporter = Tebako::BuildReporter.start(explain: om.explain?, format: om.report_format)
+      success = false
 
       do_press(om)
       cm.ensure_version_file
+      success = true
     rescue Tebako::Error => e
       puts "Tebako script failed: #{e.message} [#{e.error_code}]"
       exit e.error_code
-    end
+    ensure
+      reporter&.finish(success: success)
+      Tebako::BuildReporter.current = nil
+    end # rubocop:enable Metrics/MethodLength
 
     desc "setup", "Set up tebako packaging environment"
     method_option :Ruby, type: :string, aliases: "-R", required: false,

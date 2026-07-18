@@ -78,6 +78,45 @@ RSpec.describe Tebako::RubyBuilder do
     end
   end
 
+  describe "#target_link_with_application" do
+    let(:src_dir) { "/path/to/src" }
+    let(:builder) { described_class.new(Tebako::RubyVersion.new("3.3.11"), src_dir) }
+
+    before do
+      allow_any_instance_of(Tebako::ScenarioManagerBase).to receive(:ncores).and_return(4)
+      allow(Dir).to receive(:chdir).with(src_dir).and_yield
+      allow(FileUtils).to receive(:mkdir_p)
+      allow(FileUtils).to receive(:rm_f)
+      allow(FileUtils).to receive(:mv)
+      allow(File).to receive(:file?).and_return(true)
+      allow(SecureRandom).to receive(:hex).with(6).and_return("abcdef123456")
+    end
+
+    it "links a new executable with the application in a Mach-O section" do
+      output = "/tmp/tebako-output"
+      application = "/tmp/application envelope"
+      flags = "-Xlinker -sectcreate -Xlinker __TEBAKO -Xlinker __app " \
+              "-Xlinker \"#{File.expand_path(application)}\""
+      expect(Tebako::BuildHelpers).to receive(:run_with_capture).with(
+        [
+          "make",
+          "-f",
+          "exts.mk",
+          "tebako-bundle",
+          "TEBAKO_BUNDLE_OUTPUT=.tebako-bundle-#{Process.pid}-abcdef123456",
+          "TEBAKO_APPLICATION_LDFLAGS=#{flags}",
+          "-j4"
+        ]
+      )
+      expect(FileUtils).to receive(:mv).with(
+        File.join(src_dir, ".tebako-bundle-#{Process.pid}-abcdef123456"),
+        File.expand_path(output)
+      )
+
+      expect(builder.target_link_with_application(output, application)).to eq(output)
+    end
+  end
+
   describe "#toochain_build" do
     let(:ruby_ver) { "3.3.11" }
     let(:src_dir) { "/path/to/src" }

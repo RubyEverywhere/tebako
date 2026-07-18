@@ -28,13 +28,17 @@
 require "fileutils"
 require "find"
 require "digest"
+require "securerandom"
 
 require_relative "build_helpers"
+require_relative "error"
+require_relative "ruby_version"
+require_relative "scenario_manager"
 
 # Tebako - an executable packager
 module Tebako
   # Tebako packaging support (ruby builder)
-  class RubyBuilder
+  class RubyBuilder # rubocop:disable Metrics/ClassLength
     LINK_MANIFEST = ".tebako-link-manifest"
 
     def initialize(ruby_ver, src_dir)
@@ -76,7 +80,54 @@ module Tebako
       end
     end
 
+    # Relink only the final macOS executable, placing the application envelope
+    # in a Mach-O section so the complete one-file bundle can be code signed.
+    def target_link_with_application(output, application)
+      puts "   ... linking signed-container-ready macOS bundle"
+      target = File.expand_path(output)
+      build_name = ".tebako-bundle-#{Process.pid}-#{SecureRandom.hex(6)}"
+      build_target = File.join(@src_dir, build_name)
+      prepare_link_target(target)
+      run_application_link(build_name, application)
+      publish_application_link(output, target, build_target)
+    ensure
+      FileUtils.rm_f(build_target) if build_target
+    end
+
     private
+
+    def prepare_link_target(target)
+      FileUtils.mkdir_p(File.dirname(target))
+      FileUtils.rm_f(target)
+    end
+
+    def run_application_link(build_name, application)
+      Dir.chdir(@src_dir) do
+        make_target(
+          "-f",
+          "exts.mk",
+          "tebako-bundle",
+          "TEBAKO_BUNDLE_OUTPUT=#{build_name}",
+          "TEBAKO_APPLICATION_LDFLAGS=#{application_link_flags(application)}"
+        )
+      end
+    end
+
+    def publish_application_link(output, target, build_target)
+      raise Tebako::Error.new("macOS application link did not create #{output}", 120) unless File.file?(build_target)
+
+      FileUtils.mv(build_target, target)
+      output
+    end
+
+    def application_link_flags(application)
+      [
+        "-Xlinker", "-sectcreate",
+        "-Xlinker", "__TEBAKO",
+        "-Xlinker", "__app",
+        "-Xlinker", "\"#{File.expand_path(application)}\""
+      ].join(" ")
+    end
 
     def native_link_current?
       executable = File.join(@src_dir, "ruby#{ScenarioManagerBase.new.exe_suffix}")

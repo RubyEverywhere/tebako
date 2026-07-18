@@ -1,0 +1,20 @@
+{
+  "name": "Tebako layered application package",
+  "major_version": 1,
+  "minor_version": 0,
+  "magic": "TEBAKOL1",
+  "endianness": "little",
+  "footer": [
+    ["manifest_size", "uint64"],
+    ["magic", "bytes[8]"]
+  ],
+  "manifest_header": [
+    ["layer_count", "uint32"]
+  ],
+  "layer_record": [
+    ["mount_point_size", "uint16"],
+    ["mount_point", "bytes[mount_point_size]"],
+    ["payload_offset", "uint64"],
+    ["payload_size", "uint64"]
+  ]
+}

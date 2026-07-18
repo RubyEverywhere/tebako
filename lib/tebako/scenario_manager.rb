@@ -126,7 +126,7 @@ module Tebako
       initialize_entry_point(fs_entrance || "stub.rb")
     end
 
-    attr_reader :fs_entry_point, :fs_entrance, :gemfile_path, :needs_bundler, :with_gemfile
+    attr_reader :bundler_version, :fs_entry_point, :fs_entrance, :gemfile_path, :needs_bundler, :scenario, :with_gemfile
 
     def bundler_reference
       @needs_bundler ? "_#{@bundler_version}_" : nil

@@ -40,6 +40,17 @@ RSpec.describe Tebako::LayeredPackage do
     count, mount_size = manifest.unpack("L<S<")
     expect(count).to eq(2)
     expect(manifest.byteslice(6, mount_size)).to eq("local")
+
+    inspection = described_class.inspect(output)
+    expect(inspection.to_h).to include(
+      "format" => "layered",
+      "major_version" => 1,
+      "descriptor_size" => "descriptor".bytesize
+    )
+    expect(inspection.layers.map(&:mount_point)).to eq(["local", "lib/ruby/gems/3.4.0"])
+    expect(inspection.layers.map(&:sha256)).to eq(
+      [Digest::SHA256.hexdigest("first"), Digest::SHA256.hexdigest("second")]
+    )
   end
 
   it "rejects unsafe mount points" do
@@ -52,6 +63,22 @@ RSpec.describe Tebako::LayeredPackage do
     expect do
       described_class.write(File.join(@directory, "out"), descriptor: descriptor, layers: [layer])
     end.to raise_error(ArgumentError, /Invalid layer mount point/)
+  end
+
+  it "rejects truncated and overlapping layer manifests" do
+    descriptor = File.join(@directory, "descriptor")
+    image = File.join(@directory, "layer.dwarfs")
+    output = File.join(@directory, "application.tebako")
+    File.binwrite(descriptor, "descriptor")
+    File.binwrite(image, "image")
+    described_class.write(
+      output,
+      descriptor: descriptor,
+      layers: [described_class::Layer.new(mount_point: "local", path: image)]
+    )
+
+    File.truncate(output, File.size(output) - 1)
+    expect { described_class.inspect(output) }.to raise_error(ArgumentError, /supported layered package/)
   end
 end
 # rubocop:enable Metrics/BlockLength

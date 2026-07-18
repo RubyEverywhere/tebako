@@ -143,11 +143,11 @@ RSpec.describe Tebako::DeployHelper do
       deploy_helper.send(:bundle_install)
     end
 
-    it "installs without checking or caching when no lockfile exists" do
+    it "uses bundle check and caches installed gems when no lockfile exists" do
       deploy_helper.instance_variable_set(:@with_lockfile, false)
       allow(deploy_helper).to receive(:ncores).and_return(4)
-      expect(deploy_helper).not_to receive(:bundle_check)
-      expect(deploy_helper).not_to receive(:save_bundle_cache)
+      expect(deploy_helper).to receive(:bundle_check).and_return(false)
+      expect(deploy_helper).to receive(:save_bundle_cache)
       expect(Tebako::BuildHelpers).to receive(:run_with_capture_v)
         .with(["path/to/bundle", nil, "install", "--jobs=4"])
 
@@ -169,6 +169,7 @@ RSpec.describe Tebako::DeployHelper do
 
     it "restores cached gems into the target gem directory" do
       allow(Dir).to receive(:exist?).with(cache_path).and_return(true)
+      expect(FileUtils).to receive(:mkdir_p).with("/target/gems")
       expect(FileUtils).to receive(:cp_r).with("/cache/key/.", "/target/gems")
 
       cached_deploy_helper.send(:restore_bundle_cache)
@@ -318,6 +319,7 @@ RSpec.describe Tebako::DeployHelper do
       allow(deploy_helper).to receive(:check_entry_point)
       allow(deploy_helper).to receive(:install_all_gems_or_fail)
       allow(deploy_helper).to receive(:bundle_config)
+      allow(deploy_helper).to receive(:bundle_check).and_return(false)
       # Stubs for external calls
       allow(Dir).to receive(:chdir).and_yield
       allow(Tebako::BuildHelpers).to receive(:run_with_capture_v)
@@ -548,6 +550,39 @@ RSpec.describe Tebako::DeployHelper do
       }
       expect(deploy_helper.deploy_env).to eq(expected_env)
     end
+
+    it "uses the finalized runtime libraries for application-only deployment" do
+      tool_bin_dir = "/cache/runtime/bin"
+      helper = Tebako::DeployHelper.new(
+        fs_root,
+        fs_entrance,
+        target_dir,
+        pre_dir,
+        tool_bin_dir: tool_bin_dir
+      )
+      helper.instance_variable_set(:@gem_home, gem_home)
+      helper.instance_variable_set(:@ruby_ver, Tebako::RubyVersion.new("4.0.6"))
+      ruby_root = "/cache/runtime/lib/ruby"
+      existing_paths = [
+        "#{ruby_root}/site_ruby/4.0.0",
+        "#{ruby_root}/vendor_ruby/4.0.0",
+        "#{ruby_root}/4.0.0",
+        "#{ruby_root}/4.0.0/arm64-test"
+      ]
+      allow(Dir).to receive(:glob)
+        .with("#{ruby_root}/4.0.0/*/rbconfig.rb")
+        .and_return(["#{ruby_root}/4.0.0/arm64-test/rbconfig.rb"])
+      existing_paths.each { |path| allow(Dir).to receive(:exist?).with(path).and_return(true) }
+
+      expect(helper.deploy_env["RUBYLIB"]).to eq(
+        [
+          "#{ruby_root}/site_ruby/4.0.0",
+          "#{ruby_root}/vendor_ruby/4.0.0",
+          "#{ruby_root}/4.0.0/arm64-test",
+          "#{ruby_root}/4.0.0"
+        ].join(File::PATH_SEPARATOR)
+      )
+    end
   end
 
   describe "#deploy_gem" do
@@ -580,6 +615,7 @@ RSpec.describe Tebako::DeployHelper do
       allow(deploy_helper).to receive(:puts)
       allow(deploy_helper).to receive(:copy_files)
       allow(deploy_helper).to receive(:bundle_config)
+      allow(deploy_helper).to receive(:bundle_check).and_return(false)
       allow(deploy_helper).to receive(:check_entry_point)
       allow(Dir).to receive(:chdir).and_yield
       allow(Tebako::BuildHelpers).to receive(:run_with_capture_v)

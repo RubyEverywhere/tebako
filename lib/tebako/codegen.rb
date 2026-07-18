@@ -75,7 +75,7 @@ module Tebako
         <<~SUBST
           Tebako::Packager.deploy("#{opt.data_src_dir}", "#{opt.data_pre_dir}",
                                   rv , "#{opt.root}", "#{scm.fs_entrance}", "#{opt.cwd}",
-                                  "#{opt.bundle_cache_dir}")
+                                  "#{opt.bundle_cache_dir}", "#{opt.native_gem_cache_dir}")
           Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_bundle_file}",
                                     "#{opt.data_src_dir}", nil, #{opt.compression_level},
                                     "#{opt.filesystem_cache_dir}")
@@ -86,7 +86,7 @@ module Tebako
         <<~SUBST
           Tebako::Packager.deploy("#{opt.data_src_dir}", "#{opt.data_pre_dir}",
                                   rv, "#{File.join(opt.deps, "src", "tebako", "local")}", "stub.rb", nil,
-                                  "#{opt.bundle_cache_dir}")
+                                  "#{opt.bundle_cache_dir}", "#{opt.native_gem_cache_dir}")
           Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_stub_file}",
                                     "#{opt.data_src_dir}", nil, #{opt.compression_level},
                                     "#{opt.filesystem_cache_dir}")
@@ -148,11 +148,11 @@ module Tebako
         write_file(fname, COMMON_RUBY_HEADER + deploy_rb(options_manager, scenario_manager))
       end
 
-      def generate_package_descriptor(options_manager, scenario_manager)
+      def generate_package_descriptor(options_manager, scenario_manager, mount_point: scenario_manager.fs_mount_point)
         puts "   ... package_descriptor"
         fname = File.join(options_manager.deps, "src", "tebako", "package_descriptor")
         descriptor = Tebako::PackageDescriptor.new(options_manager.ruby_ver, Tebako::VERSION,
-                                                   scenario_manager.fs_mount_point, scenario_manager.fs_entry_point,
+                                                   mount_point, scenario_manager.fs_entry_point,
                                                    options_manager.cwd)
         write_file(fname, descriptor.serialize, binary: true)
         fname

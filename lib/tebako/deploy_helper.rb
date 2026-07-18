@@ -33,8 +33,10 @@ require "digest"
 require_relative "error"
 require_relative "build_helpers"
 require_relative "packager/patch_helpers"
+require_relative "ruby_version"
 require_relative "scenario_manager"
 require_relative "version"
+require_relative "native_gem_cache"
 
 require_relative "packager/patch"
 require_relative "packager/rubygems_patch"
@@ -45,13 +47,16 @@ module Tebako
   class DeployHelper < ScenarioManagerWithBundler # rubocop:disable Metrics/ClassLength
     BUNDLE_CACHE_VERSION = 1
 
-    def initialize(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir = nil)
+    def initialize(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir = nil, # rubocop:disable Metrics/ParameterLists
+                   native_gem_cache_dir = nil, tool_bin_dir: nil)
       super(fs_root, fs_entrance)
       @fs_root = fs_root
       @fs_entrance = fs_entrance
       @target_dir = target_dir
       @pre_dir = pre_dir
       @bundle_cache_dir = bundle_cache_dir
+      @native_gem_cache_dir = native_gem_cache_dir
+      @tool_bin_dir = tool_bin_dir
       @verbose = %w[yes true].include?(ENV.fetch("VERBOSE", nil))
     end
 
@@ -70,31 +75,42 @@ module Tebako
       configure_commands
     end
 
-    def deploy
+    def deploy(install_runtime: true) # rubocop:disable Metrics/MethodLength
       BuildHelpers.with_env(deploy_env) do
         restore_bundle_cache
+        native_gem_cache.restore
         update_rubygems
-        system("#{@gem_command} env") if @verbose
-        install_gem("tebako-runtime")
+        system(*gem_command("env")) if @verbose
+        install_gem("tebako-runtime") if install_runtime
         install_gem("bundler", @bundler_version) if @needs_bundler
         deploy_solution
+        native_gem_cache.save
         check_cwd
+      end
+    end # rubocop:enable Metrics/MethodLength
+
+    def deploy_runtime
+      BuildHelpers.with_env(deploy_env) do
+        update_rubygems
+        install_gem("tebako-runtime")
       end
     end
 
     def deploy_env
-      {
+      environment = {
         "GEM_HOME" => gem_home,
         "GEM_PATH" => gem_home,
         "GEM_SPEC_CACHE" => File.join(@target_dir, "spec_cache"),
         "TEBAKO_PASS_THROUGH" => "1"
       }
+      environment["RUBYLIB"] = tool_ruby_lib if @tool_bin_dir
+      environment
     end
 
     def install_gem(name, ver = nil)
       puts "   ... installing #{name} gem#{" version #{ver}" if ver}"
 
-      params = [@gem_command, "install", name.to_s]
+      params = gem_command("install", name.to_s)
       params += ["-v", ver.to_s] if ver
       params += ["--no-document", "--install-dir", @tgd, "--bindir", @tbd]
       params += ["--platform", "ruby"] if msys?
@@ -105,14 +121,44 @@ module Tebako
       return if @ruby_ver.ruby31?
 
       puts "   ... updating rubygems to #{Tebako::RUBYGEMS_VERSION}"
-      BuildHelpers.run_with_capture_v([@gem_command, "update", "--no-doc", "--system",
-                                       Tebako::RUBYGEMS_VERSION])
+      BuildHelpers.run_with_capture_v(gem_command("update", "--no-doc", "--system", Tebako::RUBYGEMS_VERSION))
 
       patch = Packager::RubygemsUpdatePatch.new(@fs_mount_point).patch_map
       Packager.do_patch(patch, "#{@target_dir}/lib/ruby/site_ruby/#{@ruby_ver.api_version}")
     end
 
     private
+
+    def tool_ruby_lib
+      ruby_root = File.expand_path(File.join(@tool_bin_dir, "..", "lib", "ruby"))
+      version = @ruby_ver.api_version
+      version_root = File.join(ruby_root, version)
+      architecture = tool_ruby_architecture(version_root)
+      tool_ruby_paths(ruby_root, version, architecture).select { |path| Dir.exist?(path) }.join(File::PATH_SEPARATOR)
+    end
+
+    def tool_ruby_architecture(version_root)
+      Dir.glob(File.join(version_root, "*", "rbconfig.rb")).sort
+         .map { |path| File.basename(File.dirname(path)) }.first
+    end
+
+    def tool_ruby_paths(ruby_root, version, architecture)
+      paths = %w[site_ruby vendor_ruby].flat_map do |kind|
+        root = File.join(ruby_root, kind)
+        [File.join(root, version, architecture.to_s), File.join(root, version), root]
+      end
+      version_root = File.join(ruby_root, version)
+      paths.push(File.join(version_root, architecture.to_s), version_root)
+    end
+
+    def native_gem_cache
+      @native_gem_cache ||= Tebako::NativeGemCache.new(
+        cache_dir: @native_gem_cache_dir,
+        gem_home: @gem_home,
+        lockfile: @lockfile_path,
+        ruby_version: @ruby_ver
+      )
+    end
 
     def bundle_config
       bundle_config_option(["build.ffi", "--disable-system-libffi"])
@@ -121,28 +167,28 @@ module Tebako
     end
 
     def bundle_config_option(opt)
-      BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "config", "set", "--local"] + opt)
+      BuildHelpers.run_with_capture_v(bundler_command(bundler_reference, "config", "set", "--local", *opt))
     end
 
     def bundle_check
-      BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "check"])
+      BuildHelpers.run_with_capture_v(bundler_command(bundler_reference, "check"))
       true
     rescue Tebako::Error
       false
     end
 
     def bundle_install
-      if @with_lockfile && bundle_check
-        puts "   ... bundle check found all locked gems; skipping bundle install"
+      if bundle_check
+        puts "   ... bundle check found all gems; skipping bundle install"
         return
       end
 
-      BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "install", "--jobs=#{ncores}"])
-      save_bundle_cache if @with_lockfile
+      BuildHelpers.run_with_capture_v(bundler_command(bundler_reference, "install", "--jobs=#{ncores}"))
+      save_bundle_cache
     end
 
     def bundle_cache_path
-      return if @bundle_cache_dir.nil? || !@with_lockfile
+      return if @bundle_cache_dir.nil? || !@with_gemfile
 
       @bundle_cache_path ||= File.join(@bundle_cache_dir, bundle_cache_key)
     end
@@ -162,13 +208,13 @@ module Tebako
         @ruby_ver.ruby_version,
         @bundler_version,
         Gem::Platform.local.to_s,
-        @force_ruby_platform,
-        @nokogiri_option
+        @force_ruby_platform, @nokogiri_option, @with_lockfile
       ]
     end
 
     def bundle_cache_files
-      [@gemfile_path, @lockfile_path] + Dir.glob(File.join(@fs_root, "*.gemspec")).sort
+      dependency_files = [@gemfile_path, @lockfile_path].select { |path| path && File.file?(path) }
+      dependency_files + Dir.glob(File.join(@fs_root, "*.gemspec")).sort
     end
 
     def restore_bundle_cache
@@ -176,6 +222,7 @@ module Tebako
       return unless cache_path && Dir.exist?(cache_path)
 
       puts "   ... restoring bundled gems from #{cache_path}"
+      FileUtils.mkdir_p(@tgd)
       FileUtils.cp_r(File.join(cache_path, "."), @tgd)
     end
 
@@ -217,7 +264,7 @@ module Tebako
         # puts spec.executables.first unless spec.executables.empty?
         # puts spec.bindir
 
-        BuildHelpers.run_with_capture_v([@gem_command, "build", gemspec])
+        BuildHelpers.run_with_capture_v(gem_command("build", gemspec))
         install_all_gems_or_fail
       end
 
@@ -233,7 +280,7 @@ module Tebako
         bundle_config
         puts "   *** It may take a long time for a big project. It takes REALLY long time on Windows ***"
         bundle_install
-        BuildHelpers.run_with_capture_v([@bundler_command, bundler_reference, "exec", @gem_command, "build", gemspec])
+        BuildHelpers.run_with_capture_v(bundler_command(bundler_reference, "exec", *gem_command("build", gemspec)))
         install_all_gems_or_fail
       end
 
@@ -241,14 +288,38 @@ module Tebako
     end
 
     def configure_commands
-      if msys?
-        configure_commands_msys
+      configure_platform_commands
+      command_dir = @tool_bin_dir || @tbd
+      if @tool_bin_dir
+        configure_tool_commands(command_dir)
       else
-        configure_commands_not_msys
+        configure_target_commands(command_dir)
       end
+    end
 
-      @gem_command = File.join(@tbd, "gem#{@cmd_suffix}")
-      @bundler_command = File.join(@tbd, "bundle#{@bat_suffix}")
+    def configure_platform_commands
+      msys? ? configure_commands_msys : configure_commands_not_msys
+    end
+
+    def configure_target_commands(command_dir)
+      @gem_command = File.join(command_dir, "gem#{@cmd_suffix}")
+      @bundler_command = File.join(command_dir, "bundle#{@bat_suffix}")
+    end
+
+    def configure_tool_commands(command_dir)
+      @tool_ruby = File.join(command_dir, "ruby#{ScenarioManagerBase.new.exe_suffix}")
+      @gem_command = File.join(command_dir, "gem")
+      @bundler_command = File.join(command_dir, "bundle")
+    end
+
+    def gem_command(*arguments)
+      command = [@gem_command, *arguments]
+      @tool_ruby ? [@tool_ruby, *command] : command
+    end
+
+    def bundler_command(*arguments)
+      command = [@bundler_command, *arguments]
+      @tool_ruby ? [@tool_ruby, *command] : command
     end
 
     def configure_commands_msys

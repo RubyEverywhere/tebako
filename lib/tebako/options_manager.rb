@@ -33,6 +33,7 @@ require "rbconfig"
 require_relative "codegen"
 require_relative "error"
 require_relative "ruby_version"
+require_relative "scenario_manager"
 require_relative "version"
 
 # Tebako - an executable packager
@@ -50,6 +51,10 @@ module Tebako
     end
 
     attr_reader :ruby_ver, :rv
+
+    def derive(overrides)
+      Tebako::OptionsManager.new(@options.merge(overrides))
+    end
 
     def cfg_options
       ## {v_parts[3]} may be something like rc1 that won't work with CMake
@@ -80,8 +85,40 @@ module Tebako
       @bundle_cache_dir ||= File.join(deps, "bundle-cache")
     end
 
+    def application_cache_dir
+      @application_cache_dir ||= File.join(deps, "application-cache")
+    end
+
     def filesystem_cache_dir
       @filesystem_cache_dir ||= File.join(deps, "filesystem-cache")
+    end
+
+    def deployment_cache_dir
+      @deployment_cache_dir ||= File.join(deps, "deployment-cache")
+    end
+
+    def runtime_deployment_cache_dir
+      @runtime_deployment_cache_dir ||= File.join(deps, "runtime-deployment-cache")
+    end
+
+    def native_gem_cache_dir
+      @native_gem_cache_dir ||= File.join(deps, "native-gem-cache")
+    end
+
+    def finalized_runtime_cache_dir
+      @finalized_runtime_cache_dir ||= File.join(deps, "finalized-runtime-cache")
+    end
+
+    def deployment_cache?
+      @options.fetch("deployment-cache", true)
+    end
+
+    def explain?
+      @options["explain"] || false
+    end
+
+    def report_format
+      @options["report"]
     end
 
     def package_manifest
@@ -172,6 +209,18 @@ module Tebako
 
     def l_level
       @l_level ||= @options["log-level"].nil? ? "error" : @options["log-level"]
+    end
+
+    def layer_strategy
+      @options.fetch("layer-strategy", "coarse")
+    end
+
+    def bundle_format
+      @options.fetch("bundle-format", "layered")
+    end
+
+    def layer_plan_dir
+      @layer_plan_dir ||= File.join(output_folder, "layer-plan")
     end
 
     def mode

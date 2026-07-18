@@ -576,6 +576,74 @@ RSpec.describe Tebako::OptionsManager do
     end
   end
 
+  describe "#application_cache_dir" do
+    it "stores final application build state under the Tebako dependencies directory" do
+      options_manager = described_class.new("prefix" => "/tmp/tebako")
+      expect(options_manager.application_cache_dir).to eq("/tmp/tebako/deps/application-cache")
+    end
+  end
+
+  describe "#deployment_cache_dir" do
+    it "stores deployed trees under the Tebako dependencies directory" do
+      options_manager = described_class.new("prefix" => "/tmp/tebako")
+      expect(options_manager.deployment_cache_dir).to eq("/tmp/tebako/deps/deployment-cache")
+    end
+  end
+
+  describe "#native_gem_cache_dir" do
+    it "stores native artifacts under the Tebako dependencies directory" do
+      options_manager = described_class.new("prefix" => "/tmp/tebako")
+      expect(options_manager.native_gem_cache_dir).to eq("/tmp/tebako/deps/native-gem-cache")
+    end
+  end
+
+  describe "#deployment_cache?" do
+    it "defaults to enabled and supports an explicit bypass" do
+      expect(described_class.new({}).deployment_cache?).to be(true)
+      expect(described_class.new("deployment-cache" => false).deployment_cache?).to be(false)
+    end
+  end
+
+  describe "build reporting" do
+    it "exposes explain and report options" do
+      options_manager = described_class.new("explain" => true, "report" => "json")
+      expect(options_manager.explain?).to be(true)
+      expect(options_manager.report_format).to eq("json")
+    end
+  end
+
+  describe "#layer_strategy" do
+    it "defaults to coarse layers and accepts semantic planning" do
+      expect(described_class.new({}).layer_strategy).to eq("coarse")
+      expect(described_class.new("layer-strategy" => "semantic").layer_strategy).to eq("semantic")
+    end
+  end
+
+  describe "#bundle_format" do
+    it "defaults to layered bundles and accepts the legacy fallback" do
+      expect(described_class.new({}).bundle_format).to eq("layered")
+      expect(described_class.new("bundle-format" => "legacy").bundle_format).to eq("legacy")
+    end
+  end
+
+  describe "#derive" do
+    it "creates an independent options manager with explicit overrides" do
+      original = described_class.new("mode" => "bundle", "compression-level" => 5)
+      derived = original.derive("mode" => "runtime")
+
+      expect(original.mode).to eq("bundle")
+      expect(derived.mode).to eq("runtime")
+      expect(derived.compression_level).to eq(5)
+    end
+  end
+
+  describe "#finalized_runtime_cache_dir" do
+    it "stores finalized runtimes under the Tebako dependencies directory" do
+      manager = described_class.new("prefix" => "/tmp/tebako")
+      expect(manager.finalized_runtime_cache_dir).to eq("/tmp/tebako/deps/finalized-runtime-cache")
+    end
+  end
+
   describe "#process_gemfile" do
     let(:options) { { "Ruby" => "3.2.11" } }
     let(:options_manager) { described_class.new(options) }

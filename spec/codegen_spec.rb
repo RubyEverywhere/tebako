@@ -48,6 +48,7 @@ RSpec.describe Tebako::Codegen do
       mode: "application",
       deps: "/path/to/deps",
       bundle_cache_dir: "/path/to/deps/bundle-cache",
+      native_gem_cache_dir: "/path/to/deps/native-gem-cache",
       filesystem_cache_dir: "/path/to/deps/filesystem-cache",
       package_manifest: "/path/to/output/package.manifest",
       prefix: "/path/to/prefix",
@@ -163,6 +164,7 @@ RSpec.describe Tebako::Codegen do
     before do
       allow(options_manager).to receive(:deps).and_return(deps)
       allow(options_manager).to receive(:bundle_cache_dir).and_return("#{deps}/bundle-cache")
+      allow(options_manager).to receive(:native_gem_cache_dir).and_return("#{deps}/native-gem-cache")
       allow(options_manager).to receive(:filesystem_cache_dir).and_return("#{deps}/filesystem-cache")
       allow(options_manager).to receive(:root).and_return(root)
       allow(options_manager).to receive(:deps_bin_dir).and_return(deps_bin_dir)
@@ -187,7 +189,7 @@ RSpec.describe Tebako::Codegen do
         expected = <<~SUBST
           Tebako::Packager.deploy("#{data_src_dir}", "#{data_pre_dir}",
                                   rv , "#{root}", "#{fs_entrance}", "#{options_manager.cwd}",
-                                  "#{deps}/bundle-cache")
+                                  "#{deps}/bundle-cache", "#{deps}/native-gem-cache")
           Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_bundle_file}",
                                     "#{data_src_dir}", nil, 5,
                                     "#{deps}/filesystem-cache")
@@ -203,7 +205,7 @@ RSpec.describe Tebako::Codegen do
         expected = <<~SUBST
           Tebako::Packager.deploy("#{data_src_dir}", "#{data_pre_dir}",
                                   rv, "#{deps}/src/tebako/local", "stub.rb", nil,
-                                  "#{deps}/bundle-cache")
+                                  "#{deps}/bundle-cache", "#{deps}/native-gem-cache")
           Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_stub_file}",
                                     "#{data_src_dir}", nil, 5,
                                     "#{deps}/filesystem-cache")

@@ -31,10 +31,15 @@ require "pathname"
 require "rbconfig"
 
 require_relative "codegen"
+require_relative "build_reporter"
+require_relative "application_builder"
+require_relative "bundle_builder"
 require_relative "error"
 require_relative "options_manager"
 require_relative "scenario_manager"
 require_relative "packager_lite"
+require_relative "runtime_builder"
+require_relative "single_file_bundle_builder"
 
 # Tebako - an executable packager
 # Command-line interface methods
@@ -87,26 +92,45 @@ module Tebako
       check_warnings(options_manager)
       puts options_manager.press_announce(scenario_manager.msys?)
 
-      do_press_runtime(options_manager, scenario_manager)
+      do_press_build(options_manager, scenario_manager)
       do_press_application(options_manager, scenario_manager)
+    end
+
+    def do_press_build(options_manager, scenario_manager)
+      return do_press_runtime(options_manager, scenario_manager) unless options_manager.mode == "bundle"
+
+      if options_manager.bundle_format == "layered"
+        Tebako::SingleFileBundleBuilder.new(options_manager, scenario_manager).build
+        return
+      end
+
+      Tebako::BundleBuilder.new(options_manager, scenario_manager).build do
+        do_press_runtime(options_manager, scenario_manager)
+      end
     end
 
     def do_press_application(options_manager, scenario_manager)
       return unless %w[both application].include?(options_manager.mode)
 
-      packager = Tebako::PackagerLite.new(options_manager, scenario_manager)
-      packager.create_package
+      Tebako::ApplicationBuilder.new(options_manager, scenario_manager).build
     end
 
-    def do_press_runtime(options_manager, scenario_manager)
+    def do_press_runtime(options_manager, scenario_manager) # rubocop:disable Metrics/MethodLength
       return unless %w[both runtime bundle].include?(options_manager.mode)
 
-      generate_files(options_manager, scenario_manager)
-      merged_env = ENV.to_h.merge(scenario_manager.b_env)
-      Tebako.packaging_error(103) unless system(merged_env, press_cfg_cmd(options_manager))
-      Tebako.packaging_error(104) unless system(merged_env, press_build_cmd(options_manager))
-      finalize(options_manager, scenario_manager)
-    end
+      runner = ->(environment, command) { system(environment, command) }
+      file_generator = -> { generate_files(options_manager, scenario_manager) }
+      finalizer = -> { finalize(options_manager, scenario_manager) }
+      Tebako::RuntimeBuilder.new(
+        options_manager,
+        scenario_manager,
+        command_runner: runner,
+        file_generator: file_generator,
+        finalizer: finalizer,
+        configure_command: press_cfg_cmd(options_manager),
+        build_command: press_build_cmd(options_manager)
+      ).build
+    end # rubocop:enable Metrics/MethodLength
 
     def do_setup(options_manager)
       puts "Setting up tebako packaging environment"

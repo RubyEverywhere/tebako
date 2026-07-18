@@ -39,18 +39,27 @@ RSpec.describe Tebako::PackagerLite do
                              root: "/", cwd: "/app",
                              ruby_src_dir: "/tmp/ruby_src", output_type_second: "application package",
                              bundle_cache_dir: "/tmp/bundle-cache",
+                             deployment_cache?: true,
+                             native_gem_cache_dir: "/tmp/native-gem-cache",
+                             layer_plan_dir: "/tmp/layer-plan", layer_strategy: "coarse",
                              filesystem_cache_dir: "/tmp/filesystem-cache",
                              compression_level: 5)
   end
-  let(:scenario_manager) { double("ScenarioManager", fs_entrance: "/entry") }
+  let(:scenario_manager) { double("ScenarioManager", fs_entrance: "/entry", fs_mount_point: "/__tebako_memfs__") }
+  let(:deployment_cache) { double("DeploymentCache") }
 
   before do
     allow(scenario_manager).to receive(:configure_scenario)
     allow(Tebako::Codegen).to receive(:generate_package_descriptor)
     allow(Tebako::Packager).to receive(:init)
+    allow(Tebako::Packager).to receive(:init_application)
     allow(Tebako::Packager).to receive(:deploy)
+    allow(Tebako::Packager).to receive(:deploy_runtime)
     allow(Tebako::Packager).to receive(:mkdwarfs)
     allow(FileUtils).to receive(:rm_f)
+    allow(deployment_cache).to receive(:fetch).and_yield
+    allow_any_instance_of(described_class).to receive(:deployment_cache).and_return(deployment_cache)
+    allow_any_instance_of(described_class).to receive(:runtime_deployment_cache).and_return(deployment_cache)
   end
 
   describe "#initialize" do
@@ -66,7 +75,8 @@ RSpec.describe Tebako::PackagerLite do
     it "calls generate_package_descriptor" do
       packager_lite = described_class.new(options_manager, scenario_manager)
       packager_lite.codegen
-      expect(Tebako::Codegen).to have_received(:generate_package_descriptor).with(options_manager, scenario_manager)
+      expect(Tebako::Codegen).to have_received(:generate_package_descriptor)
+        .with(options_manager, scenario_manager, mount_point: "/__tebako_memfs__/application")
     end
   end
 
@@ -94,24 +104,18 @@ RSpec.describe Tebako::PackagerLite do
       ).to_stdout
     end
 
-    it "compresses and assembles independently cached layers in both mode" do
+    it "compresses the application capsule independently from the runtime" do
       allow(packager_lite).to receive(:layered?).and_call_original
-      allow(Dir).to receive(:exist?).and_return(false)
-      allow(Dir).to receive(:exist?).with("/tmp/src/local").and_return(true)
-      allow(Dir).to receive(:exist?).with("/tmp/src/lib/ruby/gems/3.2.0").and_return(true)
       allow(Tebako::LayeredPackage).to receive(:write)
 
       packager_lite.create_package
 
       expect(Tebako::Packager).to have_received(:mkdwarfs)
-        .with("/tmp/deps_bin", "/tmp/bin/layers/local.dwarfs", "/tmp/src/local", nil, 5, "/tmp/filesystem-cache")
-      expect(Tebako::Packager).to have_received(:mkdwarfs)
-        .with("/tmp/deps_bin", "/tmp/bin/layers/lib-ruby-gems-3.2.0.dwarfs",
-              "/tmp/src/lib/ruby/gems/3.2.0", nil, 5, "/tmp/filesystem-cache")
+        .with("/tmp/deps_bin", "/tmp/bin/layers/application.dwarfs", "/tmp/src", nil, 5, "/tmp/filesystem-cache")
       expect(Tebako::LayeredPackage).to have_received(:write) do |output, descriptor:, layers:|
         expect(output).to eq("test_package.tebako")
         expect(descriptor).to eq("codegen_result")
-        expect(layers.map(&:mount_point)).to eq(["local", "lib/ruby/gems/3.2.0"])
+        expect(layers.map(&:mount_point)).to eq(["application"])
       end
     end
   end
@@ -125,10 +129,11 @@ RSpec.describe Tebako::PackagerLite do
         allow(scenario_manager).to receive(:msys?).and_return(true)
         packager_lite.deploy
         expect(packager_lite).to have_received(:create_implib)
-        expect(Tebako::Packager).to have_received(:init)
-          .with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin", preserve_bin: true)
+        expect(Tebako::Packager).to have_received(:init_application)
+          .with("/tmp/src", "/tmp/pre", "/tmp/bin")
         expect(Tebako::Packager).to have_received(:deploy)
-          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache")
+          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache",
+                "/tmp/native-gem-cache", install_runtime: false, tool_bin_dir: "/tmp/stash/bin")
       end
     end
 
@@ -140,10 +145,11 @@ RSpec.describe Tebako::PackagerLite do
         allow(scenario_manager).to receive(:msys?).and_return(false)
         packager_lite.deploy
         expect(packager_lite).not_to have_received(:create_implib)
-        expect(Tebako::Packager).to have_received(:init)
-          .with("/tmp/stash", "/tmp/src", "/tmp/pre", "/tmp/bin", preserve_bin: true)
+        expect(Tebako::Packager).to have_received(:init_application)
+          .with("/tmp/src", "/tmp/pre", "/tmp/bin")
         expect(Tebako::Packager).to have_received(:deploy)
-          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache")
+          .with("/tmp/src", "/tmp/pre", ruby_version, "/", "/entry", "/app", "/tmp/bundle-cache",
+                "/tmp/native-gem-cache", install_runtime: false, tool_bin_dir: "/tmp/stash/bin")
       end
     end
   end

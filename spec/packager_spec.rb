@@ -65,6 +65,7 @@ RSpec.describe Tebako::Packager do
     let(:fs_entrance) { "/path/to/fs_entrance" }
     let(:cwd) { "/path/to/cwd" }
     let(:bundle_cache_dir) { "/path/to/bundle-cache" }
+    let(:native_gem_cache_dir) { "/path/to/native-gem-cache" }
     let(:deploy_helper) { instance_double(Tebako::DeployHelper) }
 
     before do
@@ -76,9 +77,18 @@ RSpec.describe Tebako::Packager do
 
     it "creates a new DeployHelper with the correct parameters" do
       expect(Tebako::DeployHelper).to receive(:new)
-        .with(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir)
+        .with(fs_root, fs_entrance, target_dir, pre_dir, bundle_cache_dir, native_gem_cache_dir)
         .and_return(deploy_helper)
-      Tebako::Packager.deploy(target_dir, pre_dir, ruby_ver, fs_root, fs_entrance, cwd, bundle_cache_dir)
+      Tebako::Packager.deploy(
+        target_dir,
+        pre_dir,
+        ruby_ver,
+        fs_root,
+        fs_entrance,
+        cwd,
+        bundle_cache_dir,
+        native_gem_cache_dir
+      )
     end
 
     it "configures the DeployHelper with the correct parameters" do
