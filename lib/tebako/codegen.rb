@@ -28,6 +28,7 @@
 require "pathname"
 require "fileutils"
 
+require_relative "content_manifest"
 require_relative "package_descriptor"
 
 # Tebako - an executable packager
@@ -76,7 +77,8 @@ module Tebako
                                   rv , "#{opt.root}", "#{scm.fs_entrance}", "#{opt.cwd}",
                                   "#{opt.bundle_cache_dir}")
           Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_bundle_file}",
-                                    "#{opt.data_src_dir}", nil, #{opt.compression_level})
+                                    "#{opt.data_src_dir}", nil, #{opt.compression_level},
+                                    "#{opt.filesystem_cache_dir}")
         SUBST
       end
 
@@ -86,7 +88,8 @@ module Tebako
                                   rv, "#{File.join(opt.deps, "src", "tebako", "local")}", "stub.rb", nil,
                                   "#{opt.bundle_cache_dir}")
           Tebako::Packager.mkdwarfs("#{opt.deps_bin_dir}", "#{opt.data_stub_file}",
-                                    "#{opt.data_src_dir}", nil, #{opt.compression_level})
+                                    "#{opt.data_src_dir}", nil, #{opt.compression_level},
+                                    "#{opt.filesystem_cache_dir}")
         SUBST
       end
 
@@ -135,34 +138,23 @@ module Tebako
         puts "   ... stub.rb"
 
         fname = File.join(options_manager.deps, "src", "tebako", "local", "stub.rb")
-        FileUtils.mkdir_p(File.dirname(fname))
-
-        File.open(fname, "w") do |file|
-          file.write(COMMON_RUBY_HEADER)
-          file.write(stub_rb(options_manager))
-        end
+        write_file(fname, COMMON_RUBY_HEADER + stub_rb(options_manager))
       end
 
       def generate_deploy_rb(options_manager, scenario_manager)
         puts "   ... deploy.rb"
 
         fname = File.join(options_manager.deps, "bin", "deploy.rb")
-        FileUtils.mkdir_p(File.dirname(fname))
-
-        File.open(fname, "w") do |file|
-          file.write(COMMON_RUBY_HEADER)
-          file.write(deploy_rb(options_manager, scenario_manager))
-        end
+        write_file(fname, COMMON_RUBY_HEADER + deploy_rb(options_manager, scenario_manager))
       end
 
       def generate_package_descriptor(options_manager, scenario_manager)
         puts "   ... package_descriptor"
         fname = File.join(options_manager.deps, "src", "tebako", "package_descriptor")
-        FileUtils.mkdir_p(File.dirname(fname))
         descriptor = Tebako::PackageDescriptor.new(options_manager.ruby_ver, Tebako::VERSION,
                                                    scenario_manager.fs_mount_point, scenario_manager.fs_entry_point,
                                                    options_manager.cwd)
-        File.binwrite(fname, descriptor.serialize)
+        write_file(fname, descriptor.serialize, binary: true)
         fname
       end
 
@@ -170,24 +162,59 @@ module Tebako
         puts "   ... tebako-fs.cpp"
 
         fname = File.join(options_manager.deps, "src", "tebako", "tebako-fs.cpp")
-        FileUtils.mkdir_p(File.dirname(fname))
-
-        File.open(fname, "w") do |file|
-          file.write(COMMON_C_HEADER)
-          file.write(tebako_fs_cpp(options_manager, scenario_manager))
-        end
+        write_file(fname, COMMON_C_HEADER + tebako_fs_cpp(options_manager, scenario_manager))
       end
 
       def generate_tebako_version_h(options_manager, v_parts)
         puts "   ... tebako-version.h"
 
         fname = File.join(options_manager.deps, "include", "tebako", "tebako-version.h")
-        FileUtils.mkdir_p(File.dirname(fname))
+        write_file(fname, COMMON_C_HEADER + tebako_version_h(v_parts))
+      end
 
-        File.open(fname, "w") do |file|
-          file.write(COMMON_C_HEADER)
-          file.write(tebako_version_h(v_parts))
+      def generate_package_manifest(options_manager, scenario_manager)
+        puts "   ... package.manifest"
+
+        root = package_manifest_root(options_manager)
+        metadata = package_manifest_metadata(options_manager, scenario_manager)
+        content = Tebako::ContentManifest.serialize(
+          root: root,
+          metadata: metadata,
+          excluded: package_manifest_exclusions(root, options_manager)
+        )
+        write_file(options_manager.package_manifest, content)
+      end
+
+      def package_manifest_root(options_manager)
+        return options_manager.root if options_manager.mode == "bundle"
+
+        File.join(options_manager.deps, "src", "tebako", "local")
+      end
+
+      def package_manifest_metadata(options_manager, scenario_manager)
+        {
+          compression_level: options_manager.compression_level,
+          entry_point: options_manager.mode == "bundle" ? scenario_manager.fs_entrance : "stub.rb",
+          mode: options_manager.mode == "bundle" ? "bundle" : "runtime",
+          ruby_version: options_manager.ruby_ver,
+          tebako_version: Tebako::VERSION
+        }
+      end
+
+      def package_manifest_exclusions(root, options_manager)
+        root = File.expand_path(root)
+        [options_manager.prefix, options_manager.package].compact.filter_map do |path|
+          expanded = File.expand_path(path)
+          expanded if expanded != root && expanded.start_with?("#{root}#{File::SEPARATOR}")
         end
+      end
+
+      def write_file(path, content, binary: false)
+        FileUtils.mkdir_p(File.dirname(path))
+        return path if File.exist?(path) && File.binread(path) == content
+
+        binary ? File.binwrite(path, content) : File.write(path, content)
+        path
       end
 
       def package_cwd(options_manager, scenario_manager)

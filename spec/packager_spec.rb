@@ -156,8 +156,16 @@ RSpec.describe Tebako::Packager do
     end
 
     it "recreates the stash directory" do
-      expect(Tebako::Packager::PatchHelpers).to receive(:recreate).with([src_dir, pre_dir, bin_dir])
+      expect(Tebako::Packager::PatchHelpers).to receive(:recreate).with([src_dir, pre_dir])
+      expect(Tebako::Packager::PatchHelpers).to receive(:recreate).with(bin_dir)
       described_class.init(stash_dir, src_dir, pre_dir, bin_dir)
+    end
+
+    it "preserves packaged filesystem outputs for application-only deployment" do
+      expect(Tebako::Packager::PatchHelpers).to receive(:recreate).with([src_dir, pre_dir])
+      expect(Tebako::Packager::PatchHelpers).not_to receive(:recreate).with(bin_dir)
+      expect(FileUtils).to receive(:mkdir_p).with(bin_dir)
+      described_class.init(stash_dir, src_dir, pre_dir, bin_dir, preserve_bin: true)
     end
 
     it "copies the source directory to the stash directory" do

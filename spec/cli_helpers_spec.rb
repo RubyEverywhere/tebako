@@ -46,6 +46,7 @@ RSpec.describe Tebako::CliHelpers do
     allow(Dir).to receive(:exist?).with(options["root"]).and_return(true)
     allow(File).to receive(:file?).and_call_original
     allow(File).to receive(:file?).with(/entrypoint/).and_return(true)
+    allow(Tebako::Codegen).to receive(:generate_package_manifest)
   end
 
   describe "#do_press" do
@@ -311,6 +312,7 @@ RSpec.describe Tebako::CliHelpers do
       allow(Tebako::Codegen).to receive(:generate_tebako_fs_cpp)
       allow(Tebako::Codegen).to receive(:generate_deploy_rb)
       allow(Tebako::Codegen).to receive(:generate_stub_rb)
+      allow(Tebako::Codegen).to receive(:generate_package_manifest)
       allow(self).to receive(:system).and_return(true)
       allow(self).to receive(:finalize)
     end
@@ -323,6 +325,7 @@ RSpec.describe Tebako::CliHelpers do
         expect(Tebako::Codegen).to receive(:generate_tebako_fs_cpp)
         expect(Tebako::Codegen).to receive(:generate_deploy_rb)
         expect(Tebako::Codegen).to receive(:generate_stub_rb)
+        expect(Tebako::Codegen).to receive(:generate_package_manifest)
         expect(self).to receive(:system).exactly(2).times.and_return(true)
         expect(self).to receive(:finalize)
         do_press_runtime(options_manager, scenario_manager)
@@ -337,6 +340,7 @@ RSpec.describe Tebako::CliHelpers do
         expect(Tebako::Codegen).to receive(:generate_tebako_fs_cpp)
         expect(Tebako::Codegen).to receive(:generate_deploy_rb)
         expect(Tebako::Codegen).to receive(:generate_stub_rb)
+        expect(Tebako::Codegen).to receive(:generate_package_manifest)
         expect(self).to receive(:system).exactly(2).times.and_return(true)
         expect(self).to receive(:finalize)
         do_press_runtime(options_manager, scenario_manager)
@@ -351,6 +355,7 @@ RSpec.describe Tebako::CliHelpers do
         expect(Tebako::Codegen).to receive(:generate_tebako_fs_cpp)
         expect(Tebako::Codegen).to receive(:generate_deploy_rb)
         expect(Tebako::Codegen).not_to receive(:generate_stub_rb)
+        expect(Tebako::Codegen).to receive(:generate_package_manifest)
         expect(self).to receive(:system).exactly(2).times.and_return(true)
         expect(self).to receive(:finalize)
         do_press_runtime(options_manager, scenario_manager)

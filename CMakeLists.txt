@@ -436,11 +436,22 @@ if (${SETUP_MODE})
 # ...................................................................
 # Packaged filesystem
 
-  add_custom_target(packaged_filesystem
-    COMMAND ruby ${DEPS_BIN_DIR}/deploy.rb ${RUBY_VER}
-    DEPENDS setup
-    BYPRODUCTS ${DATA_BIN_FILE}
+  file(GLOB_RECURSE TEBAKO_PACKAGER_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/tebako/*.rb
   )
+
+  add_custom_command(
+    OUTPUT ${DATA_BIN_FILE}
+    COMMAND ruby ${DEPS_BIN_DIR}/deploy.rb ${RUBY_VER}
+    DEPENDS ${DEPS_BIN_DIR}/deploy.rb ${PACKAGE_MANIFEST} ${TEBAKO_PACKAGER_SOURCES}
+    COMMENT "Building packaged filesystem from changed inputs"
+    VERBATIM
+  )
+
+  add_custom_target(packaged_filesystem
+    DEPENDS ${DATA_BIN_FILE}
+  )
+  add_dependencies(packaged_filesystem setup)
 
   set(CMAKE_CXX_FLAGS "${RUBY_C_FLAGS}")
 
@@ -450,6 +461,11 @@ if (${SETUP_MODE})
     ${DEPS_SRC_DIR}/tebako/tebako-fs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/tebako/tebako-fs.h
     ${DEPS_INCLUDE_DIR}/tebako/tebako-version.h
+  )
+
+  set_source_files_properties(
+    ${DEPS_SRC_DIR}/tebako/tebako-fs.cpp
+    PROPERTIES OBJECT_DEPENDS ${DATA_BIN_FILE}
   )
 
   if(${RUBY_VER} VERSION_LESS "3.3.0" AND ("${OSTYPE_TXT}" MATCHES "^msys*" OR "${OSTYPE_TXT}" MATCHES "^cygwin*"))

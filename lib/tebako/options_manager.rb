@@ -59,6 +59,7 @@ module Tebako
       @cfg_options ||=
         "-DCMAKE_BUILD_TYPE=Release -DRUBY_VER:STRING=\"#{@ruby_ver}\" -DRUBY_HASH:STRING=\"#{@ruby_hash}\" " \
         "-DDEPS:STRING=\"#{deps}\" -G \"#{@scmb.m_files}\" -B \"#{output_folder}\" -S \"#{source}\" " \
+        "-DPACKAGE_MANIFEST:FILEPATH=\"#{package_manifest}\" " \
         "#{remove_glibc_private} -DTEBAKO_VERSION:STRING=\"#{v_parts[0]}.#{v_parts[1]}.#{v_parts[2]}\""
     end
 
@@ -77,6 +78,14 @@ module Tebako
 
     def bundle_cache_dir
       @bundle_cache_dir ||= File.join(deps, "bundle-cache")
+    end
+
+    def filesystem_cache_dir
+      @filesystem_cache_dir ||= File.join(deps, "filesystem-cache")
+    end
+
+    def package_manifest
+      @package_manifest ||= File.join(output_folder, "package.manifest")
     end
 
     # DATA_BIN_DIR folder is used to create packaged filesystem

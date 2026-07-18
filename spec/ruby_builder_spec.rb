@@ -43,6 +43,8 @@ RSpec.describe Tebako::RubyBuilder do
       allow_any_instance_of(Tebako::ScenarioManagerBase).to receive(:ncores).and_return(ncores)
       allow(Tebako::BuildHelpers).to receive(:run_with_capture)
       allow(Dir).to receive(:chdir).with(src_dir).and_yield
+      allow(builder).to receive(:native_link_current?).and_return(false)
+      allow(builder).to receive(:record_native_link)
     end
 
     shared_examples "build behavior" do |type|
@@ -67,6 +69,12 @@ RSpec.describe Tebako::RubyBuilder do
 
     context "with 'runtime package' output type" do
       include_examples "build behavior", "runtime package"
+    end
+
+    it "skips make when all native link inputs are unchanged" do
+      allow(builder).to receive(:native_link_current?).and_return(true)
+      expect(Tebako::BuildHelpers).not_to receive(:run_with_capture)
+      expect { builder.target_build(output_type) }.to output(/reusing Ruby executable/).to_stdout
     end
   end
 

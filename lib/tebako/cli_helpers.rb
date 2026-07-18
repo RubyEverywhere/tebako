@@ -123,10 +123,8 @@ module Tebako
       Tebako::Codegen.generate_tebako_version_h(options_manager, v_parts)
       Tebako::Codegen.generate_tebako_fs_cpp(options_manager, scenario_manager)
       Tebako::Codegen.generate_deploy_rb(options_manager, scenario_manager)
-
-      return unless %w[both runtime].include?(options_manager.mode)
-
-      Tebako::Codegen.generate_stub_rb(options_manager)
+      Tebako::Codegen.generate_stub_rb(options_manager) if %w[both runtime].include?(options_manager.mode)
+      Tebako::Codegen.generate_package_manifest(options_manager, scenario_manager)
     end
 
     def finalize(options_manager, scenario_manager)

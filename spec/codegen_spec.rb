@@ -48,6 +48,10 @@ RSpec.describe Tebako::Codegen do
       mode: "application",
       deps: "/path/to/deps",
       bundle_cache_dir: "/path/to/deps/bundle-cache",
+      filesystem_cache_dir: "/path/to/deps/filesystem-cache",
+      package_manifest: "/path/to/output/package.manifest",
+      prefix: "/path/to/prefix",
+      root: "/path/to/root",
       compression_level: 5
     )
   end
@@ -89,33 +93,28 @@ RSpec.describe Tebako::Codegen do
   describe "#generate_stub_rb" do
     it "creates a stub.rb file with correct content" do
       allow(FileUtils).to receive(:mkdir_p)
-      mock_file = instance_double("File")
-      allow(File).to receive(:open).and_yield(mock_file)
-      allow(mock_file).to receive(:write)
+      allow(File).to receive(:exist?).and_return(false)
+      allow(File).to receive(:write)
 
       described_class.generate_stub_rb(options_manager)
 
       expected_path = File.join(options_manager.deps, "src", "tebako", "local", "stub.rb")
       expect(FileUtils).to have_received(:mkdir_p).with(File.dirname(expected_path))
-      expect(File).to have_received(:open).with(expected_path, "w")
-      expect(mock_file).to have_received(:write).with(Tebako::Codegen::COMMON_RUBY_HEADER)
+      expect(File).to have_received(:write).with(expected_path, include(Tebako::Codegen::COMMON_RUBY_HEADER))
     end
   end
 
   describe "#generate_deploy_rb" do
     it "creates a deploy.rb file with correct content" do
       allow(FileUtils).to receive(:mkdir_p)
-      mock_file = instance_double("File")
-      allow(File).to receive(:open).and_yield(mock_file)
-      allow(mock_file).to receive(:write)
-      allow(File).to receive(:binwrite)
+      allow(File).to receive(:exist?).and_return(false)
+      allow(File).to receive(:write)
 
       described_class.generate_deploy_rb(options_manager, scenario_manager)
 
       expected_path = File.join(options_manager.deps, "bin", "deploy.rb")
       expect(FileUtils).to have_received(:mkdir_p).with(File.dirname(expected_path))
-      expect(File).to have_received(:open).with(expected_path, "w")
-      expect(mock_file).to have_received(:write).with(Tebako::Codegen::COMMON_RUBY_HEADER)
+      expect(File).to have_received(:write).with(expected_path, include(Tebako::Codegen::COMMON_RUBY_HEADER))
     end
   end
 
@@ -164,6 +163,7 @@ RSpec.describe Tebako::Codegen do
     before do
       allow(options_manager).to receive(:deps).and_return(deps)
       allow(options_manager).to receive(:bundle_cache_dir).and_return("#{deps}/bundle-cache")
+      allow(options_manager).to receive(:filesystem_cache_dir).and_return("#{deps}/filesystem-cache")
       allow(options_manager).to receive(:root).and_return(root)
       allow(options_manager).to receive(:deps_bin_dir).and_return(deps_bin_dir)
       allow(options_manager).to receive(:data_app_file).and_return(data_app_file)
@@ -189,7 +189,8 @@ RSpec.describe Tebako::Codegen do
                                   rv , "#{root}", "#{fs_entrance}", "#{options_manager.cwd}",
                                   "#{deps}/bundle-cache")
           Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_bundle_file}",
-                                    "#{data_src_dir}", nil, 5)
+                                    "#{data_src_dir}", nil, 5,
+                                    "#{deps}/filesystem-cache")
         SUBST
 
         expect(result).to eq(expected)
@@ -204,7 +205,8 @@ RSpec.describe Tebako::Codegen do
                                   rv, "#{deps}/src/tebako/local", "stub.rb", nil,
                                   "#{deps}/bundle-cache")
           Tebako::Packager.mkdwarfs("#{deps_bin_dir}", "#{data_stub_file}",
-                                    "#{data_src_dir}", nil, 5)
+                                    "#{data_src_dir}", nil, 5,
+                                    "#{deps}/filesystem-cache")
         SUBST
 
         expect(result).to eq(expected)

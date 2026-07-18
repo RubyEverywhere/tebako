@@ -31,6 +31,7 @@ require "pathname"
 
 require_relative "error"
 require_relative "deploy_helper"
+require_relative "filesystem_cache"
 require_relative "ruby_builder"
 require_relative "stripper"
 require_relative "packager/pass1_patch"
@@ -68,7 +69,7 @@ module Tebako
       win32/file.c
     ].freeze
 
-    class << self
+    class << self # rubocop:disable Metrics/ClassLength
       # Create implib
       def create_implib(src_dir, package_src_dir, app_name, ruby_ver)
         a_name = File.basename(app_name, ".*")
@@ -107,22 +108,25 @@ module Tebako
       end
 
       # Init
-      def init(stash_dir, src_dir, pre_dir, bin_dir)
-        puts "-- Running init script"
-
-        puts "   ... creating packaging environment at #{src_dir}"
-        PatchHelpers.recreate([src_dir, pre_dir, bin_dir])
+      def init(stash_dir, src_dir, pre_dir, bin_dir, preserve_bin: false)
+        puts "-- Running init script", "   ... creating packaging environment at #{src_dir}"
+        PatchHelpers.recreate([src_dir, pre_dir])
+        preserve_bin ? FileUtils.mkdir_p(bin_dir) : PatchHelpers.recreate(bin_dir)
         FileUtils.cp_r "#{stash_dir}/.", src_dir
       end
 
-      def mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor = nil,
-                   compression_level = 5)
+      def mkdwarfs(deps_bin_dir, data_bin_file, data_src_dir, descriptor = nil, # rubocop:disable Metrics/ParameterLists
+                   compression_level = 5, cache_dir = nil) # rubocop:enable Metrics/ParameterLists
         puts "-- Running mkdwarfs script"
+        mkdwarfs = File.join(deps_bin_dir, "mkdwarfs")
         FileUtils.chmod("a+x", Dir.glob(File.join(deps_bin_dir, "mkdwarfs*")))
-        params = [File.join(deps_bin_dir, "mkdwarfs"), "-l", compression_level.to_s,
-                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
-        params << "--header" << descriptor if descriptor
-        BuildHelpers.run_with_capture_v(params)
+        return run_mkdwarfs(mkdwarfs, data_bin_file, data_src_dir, descriptor, compression_level) unless cache_dir
+
+        cache = Tebako::FilesystemCache.new(cache_dir: cache_dir, mkdwarfs: mkdwarfs, source_dir: data_src_dir,
+                                            descriptor: descriptor, compression_level: compression_level)
+        cache.fetch(data_bin_file) do
+          run_mkdwarfs(mkdwarfs, data_bin_file, data_src_dir, descriptor, compression_level)
+        end
       end
 
       # Pass1
@@ -169,6 +173,14 @@ module Tebako
 
       private
 
+      def run_mkdwarfs(mkdwarfs, data_bin_file, data_src_dir, descriptor, compression_level)
+        FileUtils.rm_f(data_bin_file)
+        params = [mkdwarfs, "-l", compression_level.to_s,
+                  "-o", data_bin_file, "-i", data_src_dir, "--no-progress"]
+        params << "--header" << descriptor if descriptor
+        BuildHelpers.run_with_capture_v(params)
+      end
+
       def create_def(src_dir, app_name)
         puts "   ... creating Windows def file"
         File.open(def_fname(src_dir, app_name), "w") do |file|
@@ -197,16 +209,6 @@ module Tebako
         params = [patchelf, "--remove-needed-version", "libpthread.so.0", "GLIBC_PRIVATE", src_name]
         BuildHelpers.run_with_capture(params)
       end
-
-      # def strip_or_copy(_os_type, src_name, package_name)
-      # [TODO] On MSys strip sometimes creates a broken executable
-      # https://github.com/tamatebako/tebako/issues/172
-      # if Packager::PatchHelpers.msys?(os_type)
-      # FileUtils.cp(src_name, package_name)
-      # else
-      # Tebako::Stripper.strip_file(src_name, package_name)
-      # end
-      # end
-    end
+    end # rubocop:enable Metrics/ClassLength
   end
 end
