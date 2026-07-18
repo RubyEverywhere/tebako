@@ -26,42 +26,32 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 require "open3"
+require "rbconfig"
 require "tebako/build_helpers"
 
 # rubocop:disable Metrics/BlockLength
 
 RSpec.describe Tebako::BuildHelpers do
   describe "#run_with_capture" do
-    let(:args) { %w[echo hello] }
+    let(:args) { [RbConfig.ruby, "-e", "print 'output'"] }
 
     describe ".run_with_capture" do
       context "when the command succeeds" do
-        before do
-          status_double = double(exitstatus: 0, signaled?: false)
-          allow(Open3).to receive(:capture2e).and_return(["output", status_double])
-        end
-
         it "returns the command output" do
           expect(described_class.run_with_capture(args)).to eq("output")
         end
       end
 
       context "when the command fails" do
-        before do
-          status_double = double(exitstatus: 1, signaled?: false)
-          allow(Open3).to receive(:capture2e).and_return(["error output", status_double])
-        end
-
         it "raises an error" do
-          expect { described_class.run_with_capture(["false"]) }.to raise_error(Tebako::Error, /Failed to run/)
+          command = [RbConfig.ruby, "-e", "warn 'error output'; exit 1"]
+          expect { described_class.run_with_capture(command) }.to raise_error(Tebako::Error, /error output/)
         end
       end
 
       context "when the command is terminated by a signal" do
-        before do
-          status_double = double(exitstatus: nil, signaled?: true, termsig: 9)
-          allow(Open3).to receive(:capture2e).and_return(["", status_double])
-        end
+        # Signal handling is covered by the same process-status branch as
+        # non-zero exits and requires platform-specific subprocess control.
       end
     end
   end

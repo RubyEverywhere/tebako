@@ -159,6 +159,8 @@ RSpec.describe Tebako::ScenarioManagerWithBundler do
     let(:tmp_dir) { Dir.mktmpdir }
     let(:scenario_manager) { described_class.new(tmp_dir, "dummy_entry.rb") }
     let(:gemfile_path) { File.join(tmp_dir, "Gemfile") }
+    let(:mock_fetcher) { instance_double(Gem::SpecFetcher) }
+    let(:mock_tuple) { Gem::NameTuple.new("bundler", Gem::Version.new("2.6.3"), "ruby") }
 
     after do
       FileUtils.remove_entry(tmp_dir)
@@ -171,6 +173,8 @@ RSpec.describe Tebako::ScenarioManagerWithBundler do
           gem 'bundler', '= 2.6.3'
         GEMFILE
         )
+        allow(Gem::SpecFetcher).to receive(:fetcher).and_return(mock_fetcher)
+        allow(mock_fetcher).to receive(:detect).and_return([[mock_tuple, nil]])
       end
 
       it "finds compatible bundler version" do
