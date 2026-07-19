@@ -113,6 +113,14 @@ module Tebako
         sdk_dependency_paths(options_manager).each do |path|
           components["deps/#{path.delete_prefix("#{options_manager.deps}/")}"] = path
         end
+        # The patched exts.mk links every press with `-L<prefix>/o -ltebako-fs`,
+        # and libtebako-fs.a is the ONE library CMake builds into o/ instead of
+        # deps/lib — without it an SDK install fails its first application
+        # relink with "ld: library 'tebako-fs' not found".
+        libtebako_fs = File.join(options_manager.output_folder, "libtebako-fs.a")
+        raise Tebako::Error.new("Runtime build did not produce #{libtebako_fs}", 121) unless File.exist?(libtebako_fs)
+
+        components["o/libtebako-fs.a"] = libtebako_fs
         sdk = options["sdk-output"]
         Tebako::RuntimeSdk.pack(
           output: sdk,
