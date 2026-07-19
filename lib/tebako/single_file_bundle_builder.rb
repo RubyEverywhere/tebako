@@ -68,6 +68,10 @@ module Tebako
       return if File.file?(marker) && File.binread(marker) == @runtime_identity
 
       base = File.join(@opts.output_folder, "bundle-work", output_identity, "macho-link-runtime")
+      # The runtime build's final strip writes here with `strip -o`, which
+      # cannot create missing directories — without this, a fresh identity dir
+      # produces a "could not strip" warning and no byproduct file.
+      FileUtils.mkdir_p(File.dirname(base))
       Tebako::RuntimeBuilder.new(runtime_options(base), @scm).build
     end
 

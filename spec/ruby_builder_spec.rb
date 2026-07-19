@@ -103,6 +103,7 @@ RSpec.describe Tebako::RubyBuilder do
           "-f",
           "exts.mk",
           "tebako-bundle",
+          "EXTENCS=enc/encinit.o enc/libenc.a enc/libtrans.a",
           "TEBAKO_BUNDLE_OUTPUT=.tebako-bundle-#{Process.pid}-abcdef123456",
           "TEBAKO_APPLICATION_LDFLAGS=#{flags}",
           "-j4"
@@ -114,6 +115,14 @@ RSpec.describe Tebako::RubyBuilder do
       )
 
       expect(builder.target_link_with_application(output, application)).to eq(output)
+    end
+
+    it "fails when the static encoding objects are missing from the Ruby build" do
+      allow(File).to receive(:file?).with(File.join(src_dir, "enc/libenc.a")).and_return(false)
+
+      expect do
+        builder.target_link_with_application("/tmp/tebako-output", "/tmp/application envelope")
+      end.to raise_error(Tebako::Error, /static encoding objects missing.*enc\/libenc\.a/)
     end
   end
 

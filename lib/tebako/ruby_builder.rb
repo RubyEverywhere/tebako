@@ -107,10 +107,29 @@ module Tebako
           "-f",
           "exts.mk",
           "tebako-bundle",
+          "EXTENCS=#{enc_link_objects.join(" ")}",
           "TEBAKO_BUNDLE_OUTPUT=#{build_name}",
           "TEBAKO_APPLICATION_LDFLAGS=#{application_link_flags(application)}"
         )
       end
+    end
+
+    # exts.mk's SUBMAKEOPTS folds $(EXTENCS) into the EXTOBJS it hands the
+    # sub-make. Ruby's own build supplies it (common.mk build-ext passes
+    # EXTENCS="$(ENCOBJS)"); invoked standalone the variable expands empty,
+    # the static encoding objects drop out of the link, and libruby-static.a's
+    # dmyenc.o (a no-op Init_enc) satisfies the symbol instead. The resulting
+    # binary boots with only builtin encodings and NO Encoding constants, and
+    # the first extension that looks up Encoding::UTF_8 (json) dies with
+    # NameError.
+    def enc_link_objects
+      objects = ["enc/encinit.o", "enc/libenc.a", "enc/libtrans.a"]
+      missing = objects.reject { |path| File.file?(File.join(@src_dir, path)) }
+      unless missing.empty?
+        raise Tebako::Error.new("static encoding objects missing from Ruby build: #{missing.join(", ")}", 120)
+      end
+
+      objects
     end
 
     def publish_application_link(output, target, build_target)
