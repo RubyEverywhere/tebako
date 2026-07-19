@@ -133,6 +133,33 @@ RSpec.describe Tebako::RuntimeSdk do
     end
   end
 
+  it "installs every file with one shared mtime so make never regenerates autotools outputs" do
+    Dir.mktmpdir do |root|
+      component = File.join(root, "component")
+      archive = File.join(root, "runtime-sdk.tar.gz")
+      destination = File.join(root, "installed")
+      FileUtils.mkdir_p(component)
+      # Alphabetical archive order writes "configure" before "configure.ac",
+      # so without normalization the extracted configure ends up OLDER than
+      # its own prerequisite and make tries to rerun autoconf (missing on
+      # build runners).
+      File.write(File.join(component, "configure"), "generated")
+      File.write(File.join(component, "configure.ac"), "source")
+
+      described_class.pack(
+        output: archive,
+        components: { "deps" => component },
+        descriptor: descriptor
+      )
+      described_class.install(archive: archive, destination: destination)
+
+      mtimes = Dir[File.join(destination, "**", "*")]
+               .reject { |path| File.symlink?(path) }
+               .map { |path| File.mtime(path) }
+      expect(mtimes.uniq.size).to eq(1)
+    end
+  end
+
   it "preserves safe relative symlinks" do
     skip "symlink creation is unavailable" if Gem.win_platform?
 

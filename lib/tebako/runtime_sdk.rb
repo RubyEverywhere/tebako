@@ -6,6 +6,7 @@
 
 require "digest"
 require "fileutils"
+require "find"
 require "json"
 require "pathname"
 require "rubygems/package"
@@ -47,6 +48,7 @@ module Tebako
         relocate_install(temporary, manifest, destination)
         activate_runtime(temporary, manifest) if manifest["runtime_path"]
         register_environment(temporary)
+        normalize_mtimes(temporary)
         publish_install(temporary, destination)
         manifest
       ensure
@@ -308,6 +310,23 @@ module Tebako
 
         FileUtils.mkdir_p(File.dirname(target))
         File.symlink(link, target)
+      end
+
+      # The archive stores no mtimes: extraction stamps each file as it is
+      # written, in archive (alphabetical) order — which inverts autotools
+      # dependencies. "configure" sorts before "configure.ac", so make inside
+      # the installed Ruby build tree would try to regenerate configure with
+      # autoconf (absent on build runners). One shared timestamp across the
+      # whole tree makes it quiescent: make rebuilds only when a prerequisite
+      # is strictly NEWER than its target. Runs last, after relocation and
+      # activation have finished mutating files.
+      def normalize_mtimes(root)
+        stamp = Time.now
+        Find.find(root) do |path|
+          File.utime(stamp, stamp, path) unless File.symlink?(path)
+        end
+      rescue SystemCallError => e
+        raise Tebako::Error.new("Unable to normalize runtime SDK timestamps: #{e.message}", 121)
       end
 
       def publish_install(temporary, destination)
